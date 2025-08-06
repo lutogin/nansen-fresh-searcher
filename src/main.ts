@@ -1,8 +1,8 @@
-import { logger } from './utils/logger';
 import { configService } from './config/config.service';
-import { FreshWalletScanner } from './services/scanner.service';
-import { FreshWalletService } from './services/fresh-wallet.service';
 import { NansenApiClient } from './nansen/nansen.client';
+import { FreshWalletService } from './services/fresh-wallet.service';
+import { FreshWalletScanner } from './services/scanner.service';
+import { logger } from './utils/logger';
 
 /**
  * Main Application class following SOLID principles
@@ -23,7 +23,8 @@ export class Application {
   ) {
     // Dependency injection with defaults (can be overridden for testing)
     this.nansenClient = nansenClient || new NansenApiClient();
-    this.freshWalletService = freshWalletService || new FreshWalletService(this.nansenClient);
+    this.freshWalletService =
+      freshWalletService || new FreshWalletService(this.nansenClient);
     this.scanner = scanner || new FreshWalletScanner(this.freshWalletService);
 
     this.setupSignalHandlers();
@@ -146,7 +147,7 @@ export class Application {
     });
 
     process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled rejection at:', promise, 'reason:', reason);
+      logger.error(`Unhandled rejection at: ${promise}, reason: ${reason}`);
       this.stop().then(() => process.exit(1));
     });
   }

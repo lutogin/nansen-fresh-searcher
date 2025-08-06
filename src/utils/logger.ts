@@ -1,27 +1,31 @@
-import pino from 'pino';
+// Simple console logger - no bullshit, just works
+const formatTime = (): string => {
+  const now = new Date();
+  return now.toISOString().slice(0, 19).replace('T', ' ');
+};
 
-// Create logger instance with pretty formatting for development
-export const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport:
-    process.env.NODE_ENV === 'development'
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'HH:MM:ss Z',
-            ignore: 'pid,hostname',
-            messageFormat: '{levelLabel} {msg}',
-            hideObject: false,
-          },
-        }
-      : undefined,
-  formatters: {
-    level: (label) => {
-      return { level: label };
-    },
+export const logger = {
+  info: (message: string, obj?: any) => {
+    console.log(`[${formatTime()}] INFO: ${message}`);
+    if (obj) console.log(obj);
   },
-  timestamp: () => `,"time":"${new Date().toISOString()}"`,
-});
+
+  error: (message: string, obj?: any) => {
+    console.error(`[${formatTime()}] ERROR: ${message}`);
+    if (obj) console.error(obj);
+  },
+
+  warn: (message: string, obj?: any) => {
+    console.warn(`[${formatTime()}] WARN: ${message}`);
+    if (obj) console.warn(obj);
+  },
+
+  debug: (message: string, obj?: any) => {
+    if (process.env.LOG_LEVEL === 'debug') {
+      console.log(`[${formatTime()}] DEBUG: ${message}`);
+      if (obj) console.log(obj);
+    }
+  },
+};
 
 export default logger;

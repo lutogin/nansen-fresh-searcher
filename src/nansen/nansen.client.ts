@@ -57,7 +57,6 @@ export class NansenApiClient {
     this.client.interceptors.request.use(
       async (config) => {
         await this.enforceRateLimit();
-        logger.debug(`Making API request to: ${config.url}`);
         return config;
       },
       (error) => {
@@ -69,12 +68,6 @@ export class NansenApiClient {
     // Response interceptor for logging and error handling
     this.client.interceptors.response.use(
       (response: AxiosResponse) => {
-        logger.debug(`API response from ${response.config.url}:`, {
-          status: response.status,
-          dataLength: Array.isArray(response.data)
-            ? response.data.length
-            : 'non-array',
-        });
         return response;
       },
       async (error: AxiosError) => {
@@ -92,24 +85,17 @@ export class NansenApiClient {
             : null,
         };
 
-        // Логируем каждое поле отдельно для лучшей читаемости
-        logger.error('API request failed:', {
-          url: errorDetails.url,
-          method: errorDetails.method,
-          status: errorDetails.status,
-          statusText: errorDetails.statusText,
-          message: errorDetails.message,
-          code: errorDetails.code,
-        });
+        // Простое логирование ошибки API
+        logger.error(
+          `API Error: ${errorDetails.method} ${errorDetails.url} - ${errorDetails.status} ${errorDetails.statusText}`
+        );
 
-        // Логируем данные ответа отдельно, если они есть
         if (errorDetails.data) {
-          logger.error('API error response data:', errorDetails.data);
+          logger.error('Response Data:', errorDetails.data);
         }
 
-        // Логируем данные запроса отдельно, если они есть
         if (errorDetails.requestData) {
-          logger.error('API request data:', errorDetails.requestData);
+          logger.error('Request Data:', errorDetails.requestData);
         }
 
         // Retry logic for rate limiting (429) and server errors (5xx)
@@ -137,7 +123,6 @@ export class NansenApiClient {
     if (this.requestTimes.length >= this.config.maxRequestsPerSecond) {
       const waitTime = 1000 - (now - this.requestTimes[0]);
       if (waitTime > 0) {
-        logger.debug(`Rate limit reached, waiting ${waitTime}ms`);
         await this.sleep(waitTime);
       }
     }
@@ -146,7 +131,6 @@ export class NansenApiClient {
     if (this.minuteRequestTimes.length >= this.config.maxRequestsPerMinute) {
       const waitTime = 60000 - (now - this.minuteRequestTimes[0]);
       if (waitTime > 0) {
-        logger.debug(`Minute rate limit reached, waiting ${waitTime}ms`);
         await this.sleep(waitTime);
       }
     }
@@ -188,10 +172,6 @@ export class NansenApiClient {
     }
 
     const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
-    logger.warn(
-      `Retrying request (attempt ${attempt + 1}/${this.config.retryAttempts}) after ${waitTime}ms`
-    );
-
     await this.sleep(waitTime);
 
     try {
@@ -531,21 +511,16 @@ export class NansenApiClient {
           // Add small delay between requests to be respectful to API
           await this.sleep(200);
         } catch (error) {
-          logger.warn(`Failed to search tokens for chain ${chain}:`, {
-            error: error instanceof Error ? error.message : error,
-            chain,
-          });
+          logger.warn(
+            `Failed to search tokens for chain ${chain}: ${error instanceof Error ? error.message : error}`
+          );
         }
       }
     }
 
-    logger.info(`Token search completed. Found tokens for tickers:`, {
-      foundTickers: Array.from(tokenMap.keys()),
-      totalTokens: Array.from(tokenMap.values()).reduce(
-        (sum, tokens) => sum + tokens.length,
-        0
-      ),
-    });
+    logger.info(
+      `Token search completed. Found tokens for tickers: ${Array.from(tokenMap.keys()).join(', ')} (${Array.from(tokenMap.values()).reduce((sum, tokens) => sum + tokens.length, 0)} total tokens)`
+    );
 
     return tokenMap;
   }
