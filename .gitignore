@@ -1,0 +1,9 @@
+.env
+.cursorrules
+.idea/
+node_modules/
+.DS_Store
+dist/
+coverage/
+*.log
+*.tmp

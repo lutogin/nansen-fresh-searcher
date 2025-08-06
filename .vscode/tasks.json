@@ -1,0 +1,90 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Fresh Wallet Scanner",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": ["$tsc"],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "new"
+      }
+    },
+    {
+      "type": "npm",
+      "script": "build",
+      "group": "build",
+      "label": "Build TypeScript",
+      "detail": "Compile TypeScript to JavaScript",
+      "problemMatcher": ["$tsc"],
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "type": "npm",
+      "script": "test:app",
+      "group": "test",
+      "label": "Run App Tests",
+      "detail": "Run application tests",
+      "problemMatcher": ["$tsc"],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "type": "npm",
+      "script": "lint",
+      "group": "build",
+      "label": "Lint Code",
+      "detail": "Run ESLint on the codebase",
+      "problemMatcher": ["$eslint-stylish"],
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "type": "npm",
+      "script": "lint:fix",
+      "group": "build",
+      "label": "Fix Lint Issues",
+      "detail": "Automatically fix ESLint issues",
+      "problemMatcher": ["$eslint-stylish"],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    },
+    {
+      "type": "shell",
+      "command": "rm -rf dist && npm run build",
+      "group": "build",
+      "label": "Clean and Build",
+      "detail": "Clean dist folder and build project",
+      "problemMatcher": ["$tsc"],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    }
+  ]
+}
