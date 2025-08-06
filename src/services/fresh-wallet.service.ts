@@ -1,34 +1,10 @@
-import { NansenApiClient } from '../nansen/nansen.client';
-import { AppConfig, configService } from '../config/config.service';
-import { FreshWallet, SupportedChain } from '../nansen/nansen.types';
-import { logger } from '../utils/logger';
 import moment from 'moment';
+import { AppConfig, configService } from '../config/config.service';
+import { NansenApiClient } from '../nansen/nansen.client';
+import { FreshWallet } from '../nansen/nansen.types';
+import { logger } from '../utils/logger';
 
 export class FreshWalletService {
-  private readonly supportedChains: SupportedChain[] = [
-    'ethereum',
-    'solana',
-    'arbitrum',
-    // 'avalanche',
-    // 'base',
-    // 'berachain',
-    // 'bnb',
-    // 'blast',
-    // 'fantom',
-    // 'hyperevm',
-    // 'iotaevm',
-    // 'linea',
-    // 'mantle',
-    // 'optimism',
-    // 'polygon',
-    // 'ronin',
-    // 'scroll',
-    // 'sei',
-    // 'sonic',
-    // 'unichain',
-    // 'zksync',
-  ];
-
   private readonly config: AppConfig;
   private readonly nansenClient: NansenApiClient;
 
@@ -50,42 +26,60 @@ export class FreshWalletService {
       const minDepositUSD = this.config.freshWallet.minDepositUSD;
       const freshWallets: FreshWallet[] = [];
 
-      logger.info(`Searching for fresh wallets with ${tickers.join(', ')} deposits >= $${minDepositUSD}`);
+      logger.info(
+        `Searching for fresh wallets with ${tickers.join(', ')} deposits >= $${minDepositUSD}`
+      );
 
       // Сначала найдем токены для указанных тикеров
-      const tokenMap = await this.nansenClient.findTokensForTickers(tickers, this.supportedChains);
+      const tokenMap = await this.nansenClient.findTokensForTickers(
+        tickers,
+        this.config.chains
+      );
 
       if (tokenMap.size === 0) {
-        logger.warn(`No tokens found for specified tickers: ${tickers.join(', ')}`);
+        logger.warn(
+          `No tokens found for specified tickers: ${tickers.join(', ')}`
+        );
         return [];
       }
 
       logger.info(`Found tokens for tickers:`, {
         tickers: Array.from(tokenMap.keys()),
-        totalTokens: Array.from(tokenMap.values()).reduce((sum, tokens) => sum + tokens.length, 0),
+        totalTokens: Array.from(tokenMap.values()).reduce(
+          (sum, tokens) => sum + tokens.length,
+          0
+        ),
       });
 
       // Обрабатываем каждый найденный токен из указанных тикеров
       for (const [ticker, tokens] of tokenMap.entries()) {
-        logger.info(`🔍 Analyzing ${ticker.toUpperCase()} tokens for fresh wallets...`);
+        logger.info(
+          `🔍 Analyzing ${ticker.toUpperCase()} tokens for fresh wallets...`
+        );
 
         for (const token of tokens) {
           try {
-            const tokenFreshWallets = await this.findFreshWalletsForSpecificToken(
-              token.address,
-              token.chain,
-              token.symbol,
-              ticker,
-              minDepositUSD
-            );
+            const tokenFreshWallets =
+              await this.findFreshWalletsForSpecificToken(
+                token.address,
+                token.chain,
+                token.symbol,
+                ticker,
+                minDepositUSD
+              );
             freshWallets.push(...tokenFreshWallets);
 
-            logger.info(`✅ ${token.symbol} on ${token.chain}: found ${tokenFreshWallets.length} fresh wallets`);
+            logger.info(
+              `✅ ${token.symbol} on ${token.chain}: found ${tokenFreshWallets.length} fresh wallets`
+            );
 
             // Delay between tokens
-            await this.sleep(1000);
+            await this.sleep(200);
           } catch (error) {
-            logger.warn(`❌ Failed to analyze ${token.symbol} on ${token.chain}:`, error);
+            logger.warn(
+              `❌ Failed to analyze ${token.symbol} on ${token.chain}:`,
+              error
+            );
           }
         }
       }
@@ -94,7 +88,9 @@ export class FreshWalletService {
       const uniqueWallets = this.removeDuplicateWallets(freshWallets);
       uniqueWallets.sort((a, b) => b.initDepositUSD - a.initDepositUSD);
 
-      logger.info(`Fresh wallet search completed. Found ${uniqueWallets.length} fresh wallets for tickers: ${tickers.join(', ')}`);
+      logger.info(
+        `Fresh wallet search completed. Found ${uniqueWallets.length} fresh wallets for tickers: ${tickers.join(', ')}`
+      );
       return uniqueWallets;
     } catch (error) {
       logger.error('Error in fresh wallet search:', error);
@@ -117,7 +113,9 @@ export class FreshWalletService {
     const yesterday = moment().subtract(24, 'hours');
 
     try {
-      logger.debug(`🔍 Analyzing ${symbol} (${ticker}) transfers on ${chain}...`);
+      logger.debug(
+        `🔍 Analyzing ${symbol} (${ticker}) transfers on ${chain}...`
+      );
 
       // Получаем трансферы КОНКРЕТНОГО токена из тикеров
       const transfers = await this.nansenClient.getTokenTransfers({
@@ -128,8 +126,8 @@ export class FreshWalletService {
             from: yesterday.format('YYYY-MM-DD'),
             to: now.format('YYYY-MM-DD'),
           },
-          dexIncluded: true,  // ВКЛЮЧАЕМ DEX транзакции
-          cexIncluded: true,  // ВКЛЮЧАЕМ CEX транзакции
+          dexIncluded: true, // ВКЛЮЧАЕМ DEX транзакции
+          cexIncluded: true, // ВКЛЮЧАЕМ CEX транзакции
           onlySmartMoney: false,
         },
         pagination: {
@@ -139,23 +137,29 @@ export class FreshWalletService {
       });
 
       // Фильтруем только значительные входящие переводы НА ПРИВАТНЫЕ кошельки
-      const significantIncomingTransfers = transfers.filter(transfer => {
+      const significantIncomingTransfers = transfers.filter((transfer) => {
         const usdValue = transfer.valueUsd || transfer.usdValue || 0;
-        const recipient = transfer.to || transfer.toAddress || transfer.recipient;
+        const recipient =
+          transfer.to || transfer.toAddress || transfer.recipient;
 
         // ВАЖНО: проверяем что получатель - приватный кошелек (не CEX/DEX)
         // Но отправитель МОЖЕТ быть CEX/DEX - это нормально!
-        return usdValue >= minDepositUSD &&
-               recipient &&
-               this.isValidPrivateWallet(recipient);
+        return (
+          usdValue >= minDepositUSD &&
+          recipient &&
+          this.isValidPrivateWallet(recipient)
+        );
       });
 
-      logger.debug(`Found ${significantIncomingTransfers.length} significant incoming transfers for ${symbol}`);
+      logger.debug(
+        `Found ${significantIncomingTransfers.length} significant incoming transfers for ${symbol}`
+      );
 
       // Проверяем каждый кошелек-получатель на "свежесть"
       for (const transfer of significantIncomingTransfers) {
         try {
-          const recipient = transfer.to || transfer.toAddress || transfer.recipient;
+          const recipient =
+            transfer.to || transfer.toAddress || transfer.recipient;
           const usdValue = transfer.valueUsd || transfer.usdValue || 0;
           const timestamp = transfer.timestamp || transfer.blockTime;
 
@@ -164,13 +168,14 @@ export class FreshWalletService {
           logger.debug(`🔍 Checking wallet ${recipient} for freshness...`);
 
           // КРИТИЧЕСКИ ВАЖНАЯ ПРОВЕРКА: был ли кошелек пустым ДО этого перевода
-          const wasTrulyFresh = await this.verifyWalletWasTrulyFreshBeforeTransfer(
-            recipient,
-            chain,
-            timestamp,
-            tokenAddress,
-            usdValue
-          );
+          const wasTrulyFresh =
+            await this.verifyWalletWasTrulyFreshBeforeTransfer(
+              recipient,
+              chain,
+              timestamp,
+              tokenAddress,
+              usdValue
+            );
 
           if (wasTrulyFresh) {
             freshWallets.push({
@@ -179,9 +184,13 @@ export class FreshWalletService {
               initDepositUSD: usdValue,
             });
 
-            logger.info(`🎯 FRESH WALLET FOUND: ${recipient} on ${chain} - $${usdValue.toFixed(2)} (${symbol}/${ticker})`);
+            logger.info(
+              `🎯 FRESH WALLET FOUND: ${recipient} on ${chain} - $${usdValue.toFixed(2)} (${symbol}/${ticker})`
+            );
           } else {
-            logger.debug(`❌ Wallet ${recipient} had previous activity - not fresh`);
+            logger.debug(
+              `❌ Wallet ${recipient} had previous activity - not fresh`
+            );
           }
         } catch (error) {
           logger.debug('Error checking wallet:', error);
@@ -230,13 +239,15 @@ export class FreshWalletService {
       const transferDate = moment(transferTimestamp);
 
       // 3. КРИТИЧНО: проверяем что НЕ БЫЛО транзакций ДО нашего перевода
-      const previousTransactions = allTransactions.filter(tx => {
+      const previousTransactions = allTransactions.filter((tx) => {
         const txDate = moment(tx.timestamp);
         return txDate.isBefore(transferDate);
       });
 
       if (previousTransactions.length > 0) {
-        logger.debug(`${walletAddress} had ${previousTransactions.length} previous transactions - not fresh`);
+        logger.debug(
+          `${walletAddress} had ${previousTransactions.length} previous transactions - not fresh`
+        );
         return false;
       }
 
@@ -254,34 +265,38 @@ export class FreshWalletService {
       });
 
       // Убираем наш токен и смотрим что осталось
-      const otherTokens = currentBalances.filter(balance =>
-        balance.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase() &&
-        (balance.usdValue || 0) > 1 // Больше $1
+      const otherTokens = currentBalances.filter(
+        (balance) =>
+          balance.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase() &&
+          (balance.usdValue || 0) > 1 // Больше $1
       );
 
       if (otherTokens.length > 0) {
-        logger.debug(`${walletAddress} has other tokens: ${otherTokens.length} - not fresh`);
+        logger.debug(
+          `${walletAddress} has other tokens: ${otherTokens.length} - not fresh`
+        );
         return false;
       }
 
       // 5. Дополнительная проверка - исторические балансы
       try {
-        const historicalBalances = await this.nansenClient.getAddressHistoricalBalances({
-          parameters: {
-            walletAddresses: [walletAddress],
-            chain,
-            timeFrame: 30, // 30 дней назад
-            suspiciousFilter: 'off',
-          },
-          pagination: {
-            page: 1,
-            recordsPerPage: 100,
-          },
-        });
+        const historicalBalances =
+          await this.nansenClient.getAddressHistoricalBalances({
+            parameters: {
+              walletAddresses: [walletAddress],
+              chain,
+              timeFrame: 30, // 30 дней назад
+              suspiciousFilter: 'off',
+            },
+            pagination: {
+              page: 1,
+              recordsPerPage: 100,
+            },
+          });
 
         // Если есть исторические балансы > $1 - не свежий
-        const hadHistoricalBalance = historicalBalances.some(balance =>
-          (balance.usdValue || 0) > 1
+        const hadHistoricalBalance = historicalBalances.some(
+          (balance) => (balance.usdValue || 0) > 1
         );
 
         if (hadHistoricalBalance) {
@@ -289,14 +304,18 @@ export class FreshWalletService {
           return false;
         }
       } catch (error) {
-        logger.debug(`Could not get historical balances for ${walletAddress}, continuing...`);
+        logger.debug(
+          `Could not get historical balances for ${walletAddress}, continuing...`
+        );
       }
 
       logger.debug(`✅ ${walletAddress} verified as truly fresh wallet`);
       return true;
-
     } catch (error) {
-      logger.debug(`Error verifying wallet freshness for ${walletAddress}:`, error);
+      logger.debug(
+        `Error verifying wallet freshness for ${walletAddress}:`,
+        error
+      );
       return false;
     }
   }
@@ -335,7 +354,7 @@ export class FreshWalletService {
    * Helper method to add delays between requests
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -386,7 +405,7 @@ export class FreshWalletService {
       // Get smart money trades to find new wallet activity
       const smartTrades = await this.nansenClient.getSmartMoneyDexTrades({
         parameters: {
-          chains: this.supportedChains.slice(0, 3), // Limit to first 3 chains for performance
+          chains: this.config.chains,
         },
         pagination: {
           page: 1,
@@ -514,20 +533,22 @@ export class FreshWalletService {
       });
 
       // Get recent transactions to see if this is the first significant activity
-      const recentTransactions = await this.nansenClient.getAddressTransactions({
-        parameters: {
-          walletAddresses: [walletAddress],
-          chain,
-          hideSpamToken: true,
-        },
-        pagination: {
-          page: 1,
-          recordsPerPage: 50,
-        },
-        filters: {
-          volumeUsd: { from: 1 }, // Only significant transactions
-        },
-      });
+      const recentTransactions = await this.nansenClient.getAddressTransactions(
+        {
+          parameters: {
+            walletAddresses: [walletAddress],
+            chain,
+            hideSpamToken: true,
+          },
+          pagination: {
+            page: 1,
+            recordsPerPage: 50,
+          },
+          filters: {
+            volumeUsd: { from: 1 }, // Only significant transactions
+          },
+        }
+      );
 
       // If very few transactions and recent activity, likely fresh
       const hasLimitedHistory = recentTransactions.length < 10;
@@ -537,8 +558,7 @@ export class FreshWalletService {
       const thirtyDaysAgo = moment().subtract(30, 'days');
 
       const firstTransaction = recentTransactions.sort(
-        (a, b) =>
-          moment(a.timestamp).valueOf() - moment(b.timestamp).valueOf()
+        (a, b) => moment(a.timestamp).valueOf() - moment(b.timestamp).valueOf()
       )[0];
 
       const isRecentFirstActivity =

@@ -1,7 +1,8 @@
-import Joi from 'joi';
 import dotenv from 'dotenv';
-import { logger } from '../utils/logger';
+import Joi from 'joi';
 import path from 'path';
+import { SupportedChain } from '../nansen/nansen.types';
+import { logger } from '../utils/logger';
 
 // Find and load .env file from project root
 const findProjectRoot = (): string => {
@@ -36,7 +37,8 @@ console.log('Environment loaded:', {
 // Configuration schema for validation
 const configSchema = Joi.object({
   TICKERS: Joi.string().required(),
-  INTERVAL: Joi.number().integer().min(60).required(), // Минимум 60 секунд
+  CHAINS: Joi.string().required(),
+  INTERVAL: Joi.number().integer().min(60).required(), // Minimum 60 seconds
   NANSEN_BASE_URL: Joi.string().uri().required(),
   NANSEN_API_KEY: Joi.string().min(10).required(),
   NANSEN_MAX_REQUESTS_PER_SECOND: Joi.number()
@@ -56,7 +58,8 @@ const configSchema = Joi.object({
 
 export interface AppConfig {
   tickers: string[];
-  interval: number; // в секундах
+  chains: SupportedChain[];
+  interval: number; // in seconds
   nansen: {
     baseUrl: string;
     apiKey: string;
@@ -80,6 +83,7 @@ class ConfigService {
   private loadConfig(): AppConfig {
     const envConfig = {
       TICKERS: process.env.TICKERS,
+      CHAINS: process.env.CHAINS,
       INTERVAL: Number(process.env.INTERVAL),
       NANSEN_BASE_URL: process.env.NANSEN_BASE_URL,
       NANSEN_API_KEY: process.env.NANSEN_API_KEY,
@@ -116,6 +120,9 @@ class ConfigService {
       tickers: validatedConfig.TICKERS.split(',').map((ticker: string) =>
         ticker.trim().toLowerCase()
       ),
+      chains: (process.env.CHAINS || '')
+        .split(',')
+        .map((chain: string) => chain.trim().toLowerCase() as SupportedChain),
       interval: validatedConfig.INTERVAL,
       nansen: {
         baseUrl: validatedConfig.NANSEN_BASE_URL,
