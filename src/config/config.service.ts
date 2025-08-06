@@ -123,7 +123,7 @@ class ConfigService {
       chains: (process.env.CHAINS || '')
         .split(',')
         .map((chain: string) => chain.trim().toLowerCase() as SupportedChain),
-      interval: validatedConfig.INTERVAL,
+      interval: validatedConfig.INTERVAL * 1000,
       nansen: {
         baseUrl: validatedConfig.NANSEN_BASE_URL,
         apiKey: validatedConfig.NANSEN_API_KEY,

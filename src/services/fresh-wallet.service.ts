@@ -22,7 +22,7 @@ export class FreshWalletService {
     try {
       logger.info('Starting fresh wallet search...');
 
-      const tickers = this.config.tickers; // ВАЖНО: только указанные тикеры!
+      const tickers = this.config.tickers; // Get configured tickers
       const minDepositUSD = this.config.freshWallet.minDepositUSD;
       const freshWallets: FreshWallet[] = [];
 

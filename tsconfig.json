@@ -16,7 +16,6 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
-    "typeRoots": ["node_modules/@types"],
     "strictPropertyInitialization": false,
     "noImplicitAny": true,
     "noImplicitReturns": true,

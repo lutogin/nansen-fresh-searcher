@@ -1,28 +1,26 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-import { logger } from '../utils/logger';
-import { configService } from '../config/config.service';
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
 import moment from 'moment';
+import { configService } from '../config/config.service';
+import { logger } from '../utils/logger';
 import {
-  NansenConfig,
-  SmartMoneyHoldingsRequest,
-  SmartMoneyHoldingsResponse,
-  SmartMoneyDexTradesRequest,
-  SmartMoneyDexTradesResponse,
-  SmartMoneyInflowsRequest,
-  SmartMoneyInflowsResponse,
   AddressBalancesRequest,
   AddressBalancesResponse,
+  AddressHistoricalBalancesRequest,
   AddressTransactionsRequest,
   AddressTransactionsResponse,
-  AddressHistoricalBalancesRequest,
+  NansenConfig,
+  SmartMoneyDexTradesRequest,
+  SmartMoneyDexTradesResponse,
+  SmartMoneyHoldingsRequest,
+  SmartMoneyHoldingsResponse,
+  SmartMoneyInflowsRequest,
+  SmartMoneyInflowsResponse,
+  SupportedChain,
+  TokenDexTradesRequest,
+  TokenHoldersRequest,
   TokenScreenerRequest,
   TokenScreenerResponse,
-  TokenHoldersRequest,
-  TokenDexTradesRequest,
   TokenTransfersRequest,
-  ApiResponse,
-  SupportedChain,
-  SmartMoneyLabel,
 } from './nansen.types';
 
 export class NansenApiClient {
@@ -89,7 +87,9 @@ export class NansenApiClient {
           code: error.code,
           data: error.response?.data,
           headers: error.response?.headers,
-          requestData: error.config?.data ? this.safeParseJson(error.config.data) : null,
+          requestData: error.config?.data
+            ? this.safeParseJson(error.config.data)
+            : null,
         };
 
         // Логируем каждое поле отдельно для лучшей читаемости
@@ -158,6 +158,18 @@ export class NansenApiClient {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private safeParseJson(data: any): any {
+    if (typeof data === 'string') {
+      try {
+        return JSON.parse(data);
+      } catch {
+        return data;
+      }
+    }
+
+    return data;
   }
 
   private shouldRetry(error: AxiosError): boolean {

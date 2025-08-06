@@ -1,7 +1,6 @@
 import { Application } from './main';
 import { logger } from './utils/logger';
 
-// Simple entry point - just start the application
 async function main(): Promise<void> {
   try {
     const app = new Application();
@@ -12,5 +11,4 @@ async function main(): Promise<void> {
   }
 }
 
-// Start the application
 main();
