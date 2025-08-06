@@ -248,6 +248,18 @@ export interface TokenTransfersRequest {
   pagination: PaginationParams;
 }
 
+export interface TokenTransfersResponse {
+  fromLabel: string;
+  fromAddress: string;
+  toLabel: string;
+  toAddress: string;
+  value: number;
+  valueUsd: number;
+  blockTimestamp: string; // ISO format: "2025-08-01T06:46:35Z"
+  transactionHash: string;
+  txType: string; // e.g., "transfer", "multicall"
+}
+
 // Fresh Wallet Detection Types
 export interface FreshWallet {
   wallet: string;

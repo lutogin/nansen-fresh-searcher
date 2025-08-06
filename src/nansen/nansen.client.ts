@@ -21,6 +21,7 @@ import {
   TokenScreenerRequest,
   TokenScreenerResponse,
   TokenTransfersRequest,
+  TokenTransfersResponse,
 } from './nansen.types';
 
 export class NansenApiClient {
@@ -337,8 +338,13 @@ export class NansenApiClient {
     return response.data;
   }
 
-  async getTokenTransfers(request: TokenTransfersRequest): Promise<any[]> {
-    const response = await this.client.post<any[]>('/tgm/transfers', request);
+  async getTokenTransfers(
+    request: TokenTransfersRequest
+  ): Promise<TokenTransfersResponse[]> {
+    const response = await this.client.post<TokenTransfersResponse[]>(
+      '/tgm/transfers',
+      request
+    );
 
     return response.data;
   }
@@ -363,6 +369,7 @@ export class NansenApiClient {
     };
 
     const response = await this.client.post<any[]>('/tgm/flows', request);
+
     return response.data;
   }
 
@@ -455,16 +462,25 @@ export class NansenApiClient {
       { address: string; chain: string; symbol: string }[]
     >();
 
+    logger.info(
+      `Searching for tokens with tickers [${tickers.join(', ')}] in chains [${chains.join(', ')}]`
+    );
+
     const now = moment();
     const yesterday = moment().subtract(24, 'hours');
 
     // Process chains in smaller batches to avoid API limits
     const chainBatches = this.chunkArray(chains, 3); // Process 3 chains at a time
+    let processedChains = 0;
+    let totalChainsCount = chains.length;
 
     for (const chainBatch of chainBatches) {
       for (const chain of chainBatch) {
         try {
-          logger.debug(`Searching for tokens on chain: ${chain}`);
+          processedChains++;
+          logger.debug(
+            `[${processedChains}/${totalChainsCount}] Searching for tokens on chain: ${chain}`
+          );
 
           const tokens = await this.getTokenScreener({
             parameters: {
@@ -518,9 +534,23 @@ export class NansenApiClient {
       }
     }
 
-    logger.info(
-      `Token search completed. Found tokens for tickers: ${Array.from(tokenMap.keys()).join(', ')} (${Array.from(tokenMap.values()).reduce((sum, tokens) => sum + tokens.length, 0)} total tokens)`
-    );
+    logger.info(`Token search completed for chains [${chains.join(', ')}].`, {
+      searchedTickers: tickers,
+      foundTickers: Array.from(tokenMap.keys()),
+      totalTokensFound: Array.from(tokenMap.values()).reduce(
+        (sum, tokens) => sum + tokens.length,
+        0
+      ),
+      chainBreakdown: Array.from(tokenMap.values())
+        .flat()
+        .reduce(
+          (acc, token) => {
+            acc[token.chain] = (acc[token.chain] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
+    });
 
     return tokenMap;
   }

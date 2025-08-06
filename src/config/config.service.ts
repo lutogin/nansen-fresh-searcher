@@ -38,7 +38,7 @@ console.log('Environment loaded:', {
 const configSchema = Joi.object({
   TICKERS: Joi.string().required(),
   CHAINS: Joi.string().required(),
-  INTERVAL: Joi.number().integer().min(60).required(), // Minimum 60 seconds
+  INTERVAL_SECONDS: Joi.number().integer().min(60).required(), // Minimum 60 seconds
   NANSEN_BASE_URL: Joi.string().uri().required(),
   NANSEN_API_KEY: Joi.string().min(10).required(),
   NANSEN_MAX_REQUESTS_PER_SECOND: Joi.number()
@@ -59,7 +59,8 @@ const configSchema = Joi.object({
 export interface AppConfig {
   tickers: string[];
   chains: SupportedChain[];
-  interval: number; // in seconds
+  intervalSeconds: number; // in seconds
+  nodeEnv: string;
   nansen: {
     baseUrl: string;
     apiKey: string;
@@ -84,7 +85,7 @@ class ConfigService {
     const envConfig = {
       TICKERS: process.env.TICKERS,
       CHAINS: process.env.CHAINS,
-      INTERVAL: Number(process.env.INTERVAL),
+      INTERVAL_SECONDS: Number(process.env.INTERVAL_SECONDS),
       NANSEN_BASE_URL: process.env.NANSEN_BASE_URL,
       NANSEN_API_KEY: process.env.NANSEN_API_KEY,
       NANSEN_MAX_REQUESTS_PER_SECOND: Number(
@@ -98,6 +99,7 @@ class ConfigService {
       FRESH_WALLET_MIN_DEPOSIT_USD: Number(
         process.env.FRESH_WALLET_MIN_DEPOSIT_USD
       ),
+      NODE_ENV: process.env.NODE_ENV || 'dev',
     };
 
     const { error, value } = configSchema.validate(envConfig, {
@@ -123,7 +125,8 @@ class ConfigService {
       chains: (process.env.CHAINS || '')
         .split(',')
         .map((chain: string) => chain.trim().toLowerCase() as SupportedChain),
-      interval: validatedConfig.INTERVAL * 1000,
+      intervalSeconds: validatedConfig.INTERVAL,
+      nodeEnv: validatedConfig.NODE_ENV,
       nansen: {
         baseUrl: validatedConfig.NANSEN_BASE_URL,
         apiKey: validatedConfig.NANSEN_API_KEY,
@@ -139,7 +142,7 @@ class ConfigService {
 
     logger.info('Configuration loaded successfully', {
       tickers: config.tickers,
-      interval: config.interval,
+      interval: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
     });
 
@@ -155,7 +158,7 @@ class ConfigService {
   }
 
   public getInterval(): number {
-    return this.config.interval;
+    return this.config.intervalSeconds;
   }
 
   public getNansenConfig() {

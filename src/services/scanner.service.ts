@@ -1,8 +1,8 @@
 import * as cron from 'node-cron';
-import { FreshWalletService } from './fresh-wallet.service';
 import { configService } from '../config/config.service';
-import { logger } from '../utils/logger';
 import { FreshWallet } from '../nansen/nansen.types';
+import { logger } from '../utils/logger';
+import { FreshWalletService } from './fresh-wallet.service';
 
 export class FreshWalletScanner {
   private job: cron.ScheduledTask | null = null;
@@ -92,13 +92,12 @@ export class FreshWalletScanner {
 
       const duration = Date.now() - startTime;
       logger.info(
-        `Fresh wallet scan completed in ${duration}ms. Found ${freshWallets.length} fresh wallets`,
-        {
-          duration,
-          walletCount: freshWallets.length,
-          wallets: freshWallets.slice(0, 5), // Log first 5 for inspection
-        }
+        `Fresh wallet scan completed in ${duration}ms. Found ${freshWallets.length} fresh wallets`
       );
+
+      if (freshWallets.length > 0) {
+        logger.info('Top fresh wallets:', freshWallets.slice(0, 3));
+      }
 
       // Here you could add logic to:
       // - Store results in database
@@ -116,43 +115,15 @@ export class FreshWalletScanner {
    */
   private async performScan(): Promise<FreshWallet[]> {
     try {
-      // Validate API key before scanning
-      if (!configService.validateApiKey()) {
-        throw new Error(
-          'Invalid Nansen API key. Please check your configuration.'
-        );
-      }
+      logger.info('Starting fresh wallet search...');
 
-      // Run both scanning methods and combine results
-      const [regularWallets, smartMoneyWallets] = await Promise.allSettled([
-        this.freshWalletService.findFreshWallets(),
-        this.freshWalletService.findFreshWalletsWithSmartMoney(),
-      ]);
-
-      const allWallets: FreshWallet[] = [];
-
-      if (regularWallets.status === 'fulfilled') {
-        allWallets.push(...regularWallets.value);
-      } else {
-        logger.warn('Regular fresh wallet scan failed:', regularWallets.reason);
-      }
-
-      if (smartMoneyWallets.status === 'fulfilled') {
-        allWallets.push(...smartMoneyWallets.value);
-      } else {
-        logger.warn(
-          'Smart money fresh wallet scan failed:',
-          smartMoneyWallets.reason
-        );
-      }
-
-      // Remove duplicates
-      const uniqueWallets = this.removeDuplicateWallets(allWallets);
+      const freshWallets: FreshWallet[] =
+        await this.freshWalletService.findFreshWallets();
 
       // Sort by deposit amount (descending)
-      uniqueWallets.sort((a, b) => b.initDepositUSD - a.initDepositUSD);
+      freshWallets.sort((a, b) => b.initDepositUSD - a.initDepositUSD);
 
-      return uniqueWallets;
+      return freshWallets;
     } catch (error) {
       logger.error('Error in fresh wallet scanning:', error);
       throw error;
@@ -182,25 +153,6 @@ export class FreshWalletScanner {
         return '0 0 * * *';
       }
     }
-  }
-
-  /**
-   * Removes duplicate wallets from the results
-   */
-  private removeDuplicateWallets(wallets: FreshWallet[]): FreshWallet[] {
-    const seen = new Map<string, FreshWallet>();
-
-    for (const wallet of wallets) {
-      const key = `${wallet.wallet}:${wallet.chain}`;
-      const existing = seen.get(key);
-
-      // Keep the wallet with higher deposit amount if duplicate found
-      if (!existing || wallet.initDepositUSD > existing.initDepositUSD) {
-        seen.set(key, wallet);
-      }
-    }
-
-    return Array.from(seen.values());
   }
 
   /**

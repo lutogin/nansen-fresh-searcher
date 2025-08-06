@@ -22,7 +22,7 @@ export class FreshWalletService {
     try {
       logger.info('Starting fresh wallet search...');
 
-      const tickers = this.config.tickers; // Get configured tickers
+      const tickers = this.config.tickers;
       const minDepositUSD = this.config.freshWallet.minDepositUSD;
       const freshWallets: FreshWallet[] = [];
 
@@ -43,18 +43,34 @@ export class FreshWalletService {
         return [];
       }
 
-      logger.info(`Found tokens for tickers:`, {
-        tickers: Array.from(tokenMap.keys()),
-        totalTokens: Array.from(tokenMap.values()).reduce(
-          (sum, tokens) => sum + tokens.length,
-          0
-        ),
-      });
+      // Фильтруем токены только для сетей из конфигурации
+      const configuredChains = new Set(this.config.chains);
+      const filteredTokenMap = new Map<
+        string,
+        { address: string; chain: string; symbol: string }[]
+      >();
 
-      // Обрабатываем каждый найденный токен из указанных тикеров
       for (const [ticker, tokens] of tokenMap.entries()) {
+        const filteredTokens = tokens.filter((token) =>
+          configuredChains.has(token.chain as any)
+        );
+
+        if (filteredTokens.length > 0) {
+          filteredTokenMap.set(ticker, filteredTokens);
+        }
+      }
+
+      if (filteredTokenMap.size === 0) {
+        logger.warn(
+          `No tokens found in configured chains (${this.config.chains.join(', ')}) for tickers: ${tickers.join(', ')}. Check if your tickers exist in the specified chains.`
+        );
+        return [];
+      }
+
+      // Обрабатываем каждый найденный токен из указанных тикеров в настроенных сетях
+      for (const [ticker, tokens] of filteredTokenMap.entries()) {
         logger.info(
-          `🔍 Analyzing ${ticker.toUpperCase()} tokens for fresh wallets...`
+          `🔍 Analyzing ${ticker.toUpperCase()} tokens for fresh wallets (${tokens.length} tokens in configured chains)...`
         );
 
         for (const token of tokens) {
@@ -109,41 +125,45 @@ export class FreshWalletService {
     minDepositUSD: number
   ): Promise<FreshWallet[]> {
     const freshWallets: FreshWallet[] = [];
-    const now = moment();
-    const yesterday = moment().subtract(24, 'hours');
+    const fromDate = moment().subtract(
+      this.config.nodeEnv === 'dev' ? this.config.intervalSeconds + 60 : 86400, // +1 min for 100% intersection, 1 day for dev
+      'seconds'
+    );
 
     try {
       logger.debug(
         `🔍 Analyzing ${symbol} (${ticker}) transfers on ${chain}...`
       );
 
-      // Получаем трансферы КОНКРЕТНОГО токена из тикеров
-      const transfers = await this.nansenClient.getTokenTransfers({
-        parameters: {
-          chain,
-          tokenAddress,
-          date: {
-            from: yesterday.format('YYYY-MM-DD'),
-            to: now.format('YYYY-MM-DD'),
+      // Get transfers for the specific token
+      const transfers = [];
+      for (let page = 1; true; page += 1) {
+        const transfers = await this.nansenClient.getTokenTransfers({
+          parameters: {
+            chain,
+            tokenAddress,
+            date: {
+              from: fromDate.toISOString(),
+              to: moment().toISOString(),
+            },
+            dexIncluded: true,
+            cexIncluded: true,
+            onlySmartMoney: false,
           },
-          dexIncluded: true, // ВКЛЮЧАЕМ DEX транзакции
-          cexIncluded: true, // ВКЛЮЧАЕМ CEX транзакции
-          onlySmartMoney: false,
-        },
-        pagination: {
-          page: 1,
-          recordsPerPage: 500,
-        },
-      });
+          pagination: {
+            page: 1,
+            recordsPerPage: 500,
+          },
+        });
+      }
 
-      // Фильтруем только значительные входящие переводы НА ПРИВАТНЫЕ кошельки
+      // Filter significant incoming transfers only to private wallets
       const significantIncomingTransfers = transfers.filter((transfer) => {
-        const usdValue = transfer.valueUsd || transfer.usdValue || 0;
-        const recipient =
-          transfer.to || transfer.toAddress || transfer.recipient;
+        const usdValue = transfer.valueUsd || 0;
+        const recipient = transfer.toAddress;
 
-        // ВАЖНО: проверяем что получатель - приватный кошелек (не CEX/DEX)
-        // Но отправитель МОЖЕТ быть CEX/DEX - это нормально!
+        // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
+        // But the sender MAY be CEX/DEX - that's fine!
         return (
           usdValue >= minDepositUSD &&
           recipient &&
@@ -151,23 +171,22 @@ export class FreshWalletService {
         );
       });
 
-      logger.debug(
+      logger.info(
         `Found ${significantIncomingTransfers.length} significant incoming transfers for ${symbol}`
       );
 
-      // Проверяем каждый кошелек-получатель на "свежесть"
+      // Checking each recipient wallet for “freshness”
       for (const transfer of significantIncomingTransfers) {
         try {
-          const recipient =
-            transfer.to || transfer.toAddress || transfer.recipient;
-          const usdValue = transfer.valueUsd || transfer.usdValue || 0;
-          const timestamp = transfer.timestamp || transfer.blockTime;
+          const recipient = transfer.toAddress;
+          const usdValue = transfer.valueUsd || 0;
+          const timestamp = transfer.blockTimestamp;
 
           if (!recipient) continue;
 
           logger.debug(`🔍 Checking wallet ${recipient} for freshness...`);
 
-          // КРИТИЧЕСКИ ВАЖНАЯ ПРОВЕРКА: был ли кошелек пустым ДО этого перевода
+          // CRITICALLY IMPORTANT VERIFICATION: whether the wallet was empty BEFORE this transfer.
           const wasTrulyFresh =
             await this.verifyWalletWasTrulyFreshBeforeTransfer(
               recipient,

@@ -35,7 +35,7 @@ NANSEN_API_KEY=your_api_key_here
 INTERVAL=3600                      # Интервал сканирования в секундах
 TICKERS=magic,bananas31            # Токены для анализа
 FRESH_WALLET_MIN_DEPOSIT_USD=1000  # Минимальный депозит для считывания "свежим"
-NODE_ENV=development
+NODE_ENV=dev
 LOG_LEVEL=info
 ```
 

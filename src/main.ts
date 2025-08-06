@@ -51,14 +51,11 @@ export class Application {
    * Initialize application components
    */
   private async initialize(): Promise<void> {
-    // Validate configuration
-    this.validateConfiguration();
-
     // Log configuration (without sensitive data)
     const config = configService.getConfig();
     logger.info('Application configuration:', {
       tickers: config.tickers,
-      interval: config.interval,
+      interval: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
       maxRequestsPerSecond: config.nansen.maxRequestsPerSecond,
     });
@@ -70,7 +67,6 @@ export class Application {
    * Start application services
    */
   private async start(): Promise<void> {
-    // Start the fresh wallet scanner
     this.scanner.start();
 
     logger.info('Scanner status:', this.scanner.getStatus());
@@ -95,36 +91,6 @@ export class Application {
     } catch (error) {
       logger.error('Error during shutdown:', error);
     }
-  }
-
-  /**
-   * Validates the application configuration
-   */
-  private validateConfiguration(): void {
-    // Check if API key is configured
-    if (!configService.validateApiKey()) {
-      throw new Error(
-        'Invalid Nansen API key. Please set NANSEN_API_KEY in your .env file. ' +
-          'Get your API key from https://app.nansen.ai/account?tab=api'
-      );
-    }
-
-    const config = configService.getConfig();
-
-    // Validate tickers
-    if (config.tickers.length === 0) {
-      throw new Error(
-        'No tickers configured. Please set TICKERS in your .env file.'
-      );
-    }
-
-    // Validate interval
-    if (config.interval < 60) {
-      // Minimum 60 seconds
-      throw new Error('Interval must be at least 60 seconds (1 minute)');
-    }
-
-    logger.info('Configuration validation passed');
   }
 
   /**
