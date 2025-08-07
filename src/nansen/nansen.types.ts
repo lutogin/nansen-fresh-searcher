@@ -266,7 +266,12 @@ export interface TokenTransfersResponse {
   valueUsd: number;
   blockTimestamp: string; // ISO format: "2025-08-01T06:46:35Z"
   transactionHash: string;
-  txType: string; // e.g., "transfer", "multicall"
+  txType:
+    | 'transfer'
+    | 'swap'
+    | 'simpleSwap'
+    | 'multicall'
+    | 'transferAndMulticall';
 }
 
 // Fresh Wallet Detection Types

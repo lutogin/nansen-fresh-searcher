@@ -7,14 +7,17 @@ import {
   TokenTransfersResponse,
 } from '../nansen/nansen.types';
 import { logger } from '../utils/logger';
+import { CacheService } from './cache.service';
 
 export class FreshWalletService {
   private readonly config: AppConfig;
   private readonly nansenClient: NansenApiClient;
+  private readonly cacheService: CacheService;
 
-  constructor(nansenClient: NansenApiClient) {
+  constructor(nansenClient: NansenApiClient, cacheService?: CacheService) {
     this.config = configService.getConfig();
     this.nansenClient = nansenClient;
+    this.cacheService = cacheService || new CacheService();
   }
 
   /**
@@ -34,13 +37,28 @@ export class FreshWalletService {
         `Searching for fresh wallets with ${tickers.join(', ')} deposits >= $${minDepositUSD}`
       );
 
-      // Сначала найдем токены для указанных тикеров
-      const tokenMap = await this.nansenClient.findTokensForTickers(
-        tickers,
-        this.config.chains
+      // Создаем ключ кеша для поиска токенов
+      const tokensSearchCacheKey = CacheService.createKey(
+        'tokens_search',
+        tickers.sort().join(','), // Сортируем тикеры для консистентности ключа
+        this.config.chains.sort().join(',') // Сортируем цепи для консистентности ключа
       );
 
-      if (tokenMap.size === 0) {
+      // Сначала найдем токены для указанных тикеров (с кешированием)
+      const tokenMap = await this.cacheService.getOrSet(
+        tokensSearchCacheKey,
+        async () => {
+          logger.info(
+            `🔍 Searching tokens for tickers: ${tickers.join(', ')} in chains: ${this.config.chains.join(', ')} (not cached)`
+          );
+          return await this.nansenClient.findTokensForTickers(
+            tickers,
+            this.config.chains
+          );
+        }
+      );
+
+      if (!tokenMap || tokenMap.size === 0) {
         logger.warn(
           `No tokens found for specified tickers: ${tickers.join(', ')}`
         );
@@ -94,7 +112,7 @@ export class FreshWalletService {
             );
 
             // Delay between tokens
-            await this.sleep(200);
+            await this.sleep(100); // rate limit set up in clinet
           } catch (error) {
             logger.warn(
               `❌ Failed to analyze ${token.symbol} on ${token.chain}:`,
@@ -130,13 +148,14 @@ export class FreshWalletService {
   ): Promise<FreshWallet[]> {
     const freshWallets: FreshWallet[] = [];
     const fromDate = moment().subtract(
-      this.config.nodeEnv === 'dev' ? this.config.intervalSeconds + 60 : 86400, // +1 min for 100% intersection, 1 day for dev
+      this.config.nodeEnv === 'dev' ? this.config.intervalSeconds + 60 : 3600, // +1 min for 100% intersection, 1 hour for dev
       'seconds'
     );
+    const toDate = moment();
 
     try {
       logger.debug(
-        `🔍 Analyzing ${symbol} (${ticker}) transfers on ${chain}...`
+        `🔍 Analyzing ${symbol} (${ticker}) transfers on ${chain} from ${fromDate.toISOString()} to ${toDate.toISOString()}...`
       );
 
       // Get transfers for the specific token
@@ -151,7 +170,7 @@ export class FreshWalletService {
               tokenAddress,
               date: {
                 from: fromDate.toISOString(),
-                to: moment().toISOString(),
+                to: toDate.toISOString(),
               },
               dexIncluded: true,
               cexIncluded: true,
@@ -171,29 +190,32 @@ export class FreshWalletService {
       }
 
       // Filter significant incoming transfers only to private wallets
-      const significantIncomingTransfers = transfers.filter((transfer) => {
+      const filteredIncomingTransfers = transfers.filter((transfer) => {
         const usdValue = transfer.valueUsd || 0;
         const recipient = transfer.toAddress;
+        const recipientLabel = transfer.toLabel;
 
         // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
         // But the sender MAY be CEX/DEX - that's fine!
         return (
           usdValue >= minDepositUSD &&
           recipient &&
-          this.isValidPrivateWallet(recipient)
+          transfer.txType === 'transfer' &&
+          this.isValidPrivateWallet(recipient, recipientLabel)
         );
       });
 
       logger.info(
-        `Found ${significantIncomingTransfers.length} significant incoming transfers for ${symbol}`
+        `Found ${filteredIncomingTransfers.length} significant incoming transfers for ${symbol}`
       );
 
       // Checking each recipient wallet for “freshness”
-      for (const transfer of significantIncomingTransfers) {
+      for (const transfer of filteredIncomingTransfers) {
         try {
           const recipient = transfer.toAddress;
           const usdValue = transfer.valueUsd;
           const timestamp = transfer.blockTimestamp;
+          const recipientLabel = transfer.toLabel;
 
           if (!recipient) continue;
 
@@ -206,7 +228,7 @@ export class FreshWalletService {
               chain,
               timestamp,
               tokenAddress,
-              usdValue
+              recipientLabel
             );
 
           if (wasTrulyFresh) {
@@ -243,11 +265,11 @@ export class FreshWalletService {
     chain: SupportedChain,
     transferTimestamp: string,
     tokenAddress: string,
-    transferAmountUSD: number
+    recipietnLable: string
   ): Promise<boolean> {
     try {
       // 1. Проверяем что это приватный кошелек (не CEX/DEX/контракт)
-      if (!this.isValidPrivateWallet(walletAddress)) {
+      if (!this.isValidPrivateWallet(walletAddress, recipietnLable)) {
         logger.debug(`${walletAddress} is not a private wallet`);
         return false;
       }
@@ -355,31 +377,29 @@ export class FreshWalletService {
   /**
    * Проверяет что адрес - это приватный кошелек (не CEX/DEX/контракт)
    */
-  private isValidPrivateWallet(address: string): boolean {
+  private isValidPrivateWallet(address: string, label: string): boolean {
+    const regexpWallet = /^\[[^\s]*$/;
     // Простые эвристики для фильтрации известных типов адресов
     const lowerAddress = address.toLowerCase();
 
     // Известные паттерны CEX/DEX адресов (можно расширить)
-    const knownPatterns = [
-      // Uniswap
-      '0x7a250d5630b4cf539739df2c5dacb4c659f2488d',
-      '0xe592427a0aece92de3edee1f18e0157c05861564',
+    const knownAddressPatterns = [
       // Общие паттерны контрактов (много нулей в начале или конце)
       /^0x0{10,}/,
       /0{10,}$/,
     ];
 
-    for (const pattern of knownPatterns) {
+    for (const pattern of knownAddressPatterns) {
       if (typeof pattern === 'string' && lowerAddress === pattern) {
         return false;
       }
+
       if (pattern instanceof RegExp && pattern.test(lowerAddress)) {
         return false;
       }
     }
 
-    // Дополнительные проверки можно добавить
-    return true;
+    return regexpWallet.test(label);
   }
 
   /**
