@@ -455,11 +455,11 @@ export class NansenApiClient {
     tickers: string[],
     chains: SupportedChain[]
   ): Promise<
-    Map<string, { address: string; chain: string; symbol: string }[]>
+    Map<string, { address: string; chain: SupportedChain; symbol: string }[]>
   > {
     const tokenMap = new Map<
       string,
-      { address: string; chain: string; symbol: string }[]
+      { address: string; chain: SupportedChain; symbol: string }[]
     >();
 
     logger.info(
@@ -518,7 +518,7 @@ export class NansenApiClient {
               }
               tokenMap.get(tickerLower)!.push({
                 address: token.tokenAddressHex,
-                chain: token.chain,
+                chain: token.chain as SupportedChain,
                 symbol: token.tokenSymbol,
               });
             }

@@ -32,7 +32,7 @@ npm run dev
 
 ```env
 NANSEN_API_KEY=your_api_key_here
-INTERVAL=3600                      # Интервал сканирования в секундах
+INTERVAL_SECONDS=300                      # Интервал сканирования в секундах
 TICKERS=magic,bananas31            # Токены для анализа
 FRESH_WALLET_MIN_DEPOSIT_USD=1000  # Минимальный депозит для считывания "свежим"
 NODE_ENV=dev
@@ -198,7 +198,7 @@ logger.error('Ошибка', { context: 'дополнительные данны
 Настройки валидируются с помощью Joi схемы:
 
 - `TICKERS` - список токенов для мониторинга (обязательно)
-- `INTERVAL` - интервал сканирования, минимум 60 секунд (обязательно)
+- `INTERVAL_SECONDS` - интервал сканирования, минимум 60 секунд (обязательно)
 - `NANSEN_API_KEY` - API ключ Nansen (обязательно)
 - `FRESH_WALLET_MIN_DEPOSIT_USD` - минимальная сумма депозита в USD
 

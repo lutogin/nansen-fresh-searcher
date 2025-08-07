@@ -37,7 +37,7 @@ export interface SmartMoneyHoldingsRequest {
 }
 
 export interface SmartMoneyHoldingsResponse {
-  chain: string;
+  chain: SupportedChain | 'all';
   tokenAddress: string;
   symbol: string;
   sectors: string[];
@@ -59,7 +59,7 @@ export interface SmartMoneyDexTradesRequest {
 }
 
 export interface SmartMoneyDexTradesResponse {
-  chain: string;
+  chain: SupportedChain | 'all';
   timestamp: string;
   txHash: string;
   address: string;
@@ -89,7 +89,7 @@ export interface SmartMoneyInflowsRequest {
 }
 
 export interface SmartMoneyInflowsResponse {
-  chain: string;
+  chain: SupportedChain | 'all';
   tokenAddress: string;
   symbol: string;
   sectors: string[];
@@ -104,7 +104,7 @@ export interface SmartMoneyInflowsResponse {
 // Profiler API Types
 export interface AddressBalancesRequest {
   parameters: {
-    chain?: string;
+    chain?: SupportedChain | 'all';
     walletAddresses?: string[];
     entityId?: string;
     suspiciousFilter?: string;
@@ -113,7 +113,7 @@ export interface AddressBalancesRequest {
 }
 
 export interface AddressBalancesResponse {
-  chain: string;
+  chain: SupportedChain | 'all';
   tokenAddress: string;
   symbol: string;
   name: string;
@@ -123,37 +123,46 @@ export interface AddressBalancesResponse {
 
 export interface AddressTransactionsRequest {
   parameters: {
-    chain?: string;
+    chain?: SupportedChain | 'all';
     walletAddresses: string[];
     hideSpamToken?: boolean;
   };
-  pagination: PaginationParams;
+  pagination: PaginationParams; // recordsPerPage max 500
   filters?: {
     volumeUsd?: { from?: number; to?: number };
     blockTimestamp?: DateRange;
   };
 }
 
-export interface AddressTransactionsResponse {
-  chain: string;
-  timestamp: string;
-  txHash: string;
-  from: string;
-  to: string;
+export interface TokenTransformData {
+  symbol: string;
+  amount: number;
+  price: number;
   value: number;
-  gas: number;
-  gasPrice: number;
-  gasUsed: number;
-  status: string;
-  blockNumber: number;
+  address: string;
+  chain: SupportedChain;
+  fromAddress: string;
+  toAddress: string;
+  fromLabel: string;
+  toLabel: string;
+}
+
+export interface AddressTransactionsResponse {
+  chain: SupportedChain;
+  method: string;
   volumeUsd: number;
+  blockTimestamp: string; // ISO format: "2025-05-13T23:59:59Z"
+  transactionHashHex: string;
+  source: string;
+  tokenSentTransformed: TokenTransformData[];
+  tokenReceivedTransformed: TokenTransformData[];
 }
 
 export interface AddressHistoricalBalancesRequest {
   parameters: {
     walletAddresses?: string[];
     entityId?: string;
-    chain?: string;
+    chain?: SupportedChain | 'all';
     suspiciousFilter?: string;
     timeFrame?: number;
   };
@@ -195,7 +204,7 @@ export interface TokenScreenerRequest {
 
 export interface TokenScreenerResponse {
   tokenAddressHex: string;
-  chain: string;
+  chain: SupportedChain | 'all';
   logoUrl: string;
   tokenSymbol: string;
   priceUsd: number;
@@ -215,7 +224,7 @@ export interface TokenScreenerResponse {
 
 export interface TokenHoldersRequest {
   parameters: {
-    chain: string;
+    chain: SupportedChain | 'all';
     tokenAddress: string;
     date: DateRange;
     isEntity?: boolean;
@@ -228,7 +237,7 @@ export interface TokenHoldersRequest {
 
 export interface TokenDexTradesRequest {
   parameters: {
-    chain: string;
+    chain: SupportedChain | 'all';
     tokenAddress: string;
     onlySmartMoney?: boolean;
     date: DateRange;
@@ -238,7 +247,7 @@ export interface TokenDexTradesRequest {
 
 export interface TokenTransfersRequest {
   parameters: {
-    chain: string;
+    chain: SupportedChain | 'all';
     tokenAddress: string;
     date: DateRange;
     dexIncluded?: boolean;
@@ -263,13 +272,13 @@ export interface TokenTransfersResponse {
 // Fresh Wallet Detection Types
 export interface FreshWallet {
   wallet: string;
-  chain: string;
+  chain: SupportedChain | 'all';
   initDepositUSD: number;
 }
 
 export interface WalletDepositInfo {
   address: string;
-  chain: string;
+  chain: SupportedChain | 'all';
   depositUSD: number;
   timestamp: string;
   tokenSymbol: string;

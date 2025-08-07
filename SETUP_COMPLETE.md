@@ -90,7 +90,7 @@ NANSEN_API_KEY=ваш_реальный_api_ключ
 ```bash
 # В .env файле:
 TICKERS=usdc,eth,btc          # Токены для мониторинга
-INTERVAL=3600000              # Интервал сканирования (1 час)
+INTERVAL_SECONDS=300              # Интервал сканирования
 FRESH_WALLET_MIN_DEPOSIT_USD=1000  # Минимальный депозит
 ```
 
@@ -245,7 +245,7 @@ const holders = await nansenClient.getTokenHolders({
 ```env
 # Обязательные
 TICKERS=usdc,eth,wbtc                    # Токены для мониторинга
-INTERVAL=3600000                         # Интервал сканирования (мс)
+INTERVAL_SECONDS=300                         # Интервал сканирования (мс)
 NANSEN_API_KEY=ваш_api_ключ             # API ключ Nansen
 FRESH_WALLET_MIN_DEPOSIT_USD=1000        # Минимальный депозит
 

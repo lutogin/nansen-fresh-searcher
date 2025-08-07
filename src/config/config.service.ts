@@ -125,7 +125,7 @@ class ConfigService {
       chains: (process.env.CHAINS || '')
         .split(',')
         .map((chain: string) => chain.trim().toLowerCase() as SupportedChain),
-      intervalSeconds: validatedConfig.INTERVAL,
+      intervalSeconds: validatedConfig.INTERVAL_SECONDS,
       nodeEnv: validatedConfig.NODE_ENV,
       nansen: {
         baseUrl: validatedConfig.NANSEN_BASE_URL,
@@ -142,7 +142,7 @@ class ConfigService {
 
     logger.info('Configuration loaded successfully', {
       tickers: config.tickers,
-      interval: config.intervalSeconds,
+      intervalSeconds: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
     });
 

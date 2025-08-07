@@ -27,7 +27,7 @@ export class FreshWalletScanner {
       const cronExpression = this.convertIntervalToCron(interval);
 
       logger.info(
-        `Starting fresh wallet scanner with interval: ${interval}s (${cronExpression})`
+        `Starting fresh wallet scanner with interval (in seconds): ${interval}s (${cronExpression})`
       );
 
       this.job = cron.schedule(

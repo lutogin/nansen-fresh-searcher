@@ -20,5 +20,9 @@
   "typescript.preferences.noSemicolons": false,
   "debug.console.fontSize": 14,
   "debug.console.lineHeight": 18,
+  "debug.javascript.usePreview": false,
+  "debug.node.autoAttach": "off",
+  "debug.allowBreakpointsEverywhere": true,
+  "debug.javascript.unmapMissingSources": true,
   "terminal.integrated.defaultProfile.osx": "zsh"
 }

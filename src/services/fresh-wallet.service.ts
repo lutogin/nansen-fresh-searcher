@@ -1,7 +1,11 @@
 import moment from 'moment';
 import { AppConfig, configService } from '../config/config.service';
 import { NansenApiClient } from '../nansen/nansen.client';
-import { FreshWallet } from '../nansen/nansen.types';
+import {
+  FreshWallet,
+  SupportedChain,
+  TokenTransfersResponse,
+} from '../nansen/nansen.types';
 import { logger } from '../utils/logger';
 
 export class FreshWalletService {
@@ -44,15 +48,15 @@ export class FreshWalletService {
       }
 
       // Фильтруем токены только для сетей из конфигурации
-      const configuredChains = new Set(this.config.chains);
+      const configuredChains: Set<SupportedChain> = new Set(this.config.chains);
       const filteredTokenMap = new Map<
         string,
-        { address: string; chain: string; symbol: string }[]
+        { address: string; chain: SupportedChain; symbol: string }[]
       >();
 
       for (const [ticker, tokens] of tokenMap.entries()) {
         const filteredTokens = tokens.filter((token) =>
-          configuredChains.has(token.chain as any)
+          configuredChains.has(token.chain)
         );
 
         if (filteredTokens.length > 0) {
@@ -119,7 +123,7 @@ export class FreshWalletService {
    */
   private async findFreshWalletsForSpecificToken(
     tokenAddress: string,
-    chain: string,
+    chain: SupportedChain,
     symbol: string,
     ticker: string,
     minDepositUSD: number
@@ -137,24 +141,33 @@ export class FreshWalletService {
 
       // Get transfers for the specific token
       const transfers = [];
+      const recordsPerPage = 500;
+
       for (let page = 1; true; page += 1) {
-        const transfers = await this.nansenClient.getTokenTransfers({
-          parameters: {
-            chain,
-            tokenAddress,
-            date: {
-              from: fromDate.toISOString(),
-              to: moment().toISOString(),
+        const transfersChunk: TokenTransfersResponse[] =
+          await this.nansenClient.getTokenTransfers({
+            parameters: {
+              chain,
+              tokenAddress,
+              date: {
+                from: fromDate.toISOString(),
+                to: moment().toISOString(),
+              },
+              dexIncluded: true,
+              cexIncluded: true,
+              onlySmartMoney: false,
             },
-            dexIncluded: true,
-            cexIncluded: true,
-            onlySmartMoney: false,
-          },
-          pagination: {
-            page: 1,
-            recordsPerPage: 500,
-          },
-        });
+            pagination: {
+              page,
+              recordsPerPage,
+            },
+          });
+
+        transfers.push(...transfersChunk);
+
+        if (transfersChunk.length < recordsPerPage) {
+          break;
+        }
       }
 
       // Filter significant incoming transfers only to private wallets
@@ -179,7 +192,7 @@ export class FreshWalletService {
       for (const transfer of significantIncomingTransfers) {
         try {
           const recipient = transfer.toAddress;
-          const usdValue = transfer.valueUsd || 0;
+          const usdValue = transfer.valueUsd;
           const timestamp = transfer.blockTimestamp;
 
           if (!recipient) continue;
@@ -227,7 +240,7 @@ export class FreshWalletService {
    */
   private async verifyWalletWasTrulyFreshBeforeTransfer(
     walletAddress: string,
-    chain: string,
+    chain: SupportedChain,
     transferTimestamp: string,
     tokenAddress: string,
     transferAmountUSD: number
@@ -243,15 +256,15 @@ export class FreshWalletService {
       const allTransactions = await this.nansenClient.getAddressTransactions({
         parameters: {
           walletAddresses: [walletAddress],
-          chain,
+          chain: 'all',
           hideSpamToken: true,
         },
         pagination: {
           page: 1,
-          recordsPerPage: 1000, // Максимум для полной истории
+          recordsPerPage: 100,
         },
         filters: {
-          volumeUsd: { from: 0.1 }, // Любые транзакции от $0.1
+          volumeUsd: { from: 100 },
         },
       });
 
@@ -259,7 +272,7 @@ export class FreshWalletService {
 
       // 3. КРИТИЧНО: проверяем что НЕ БЫЛО транзакций ДО нашего перевода
       const previousTransactions = allTransactions.filter((tx) => {
-        const txDate = moment(tx.timestamp);
+        const txDate = moment(tx.blockTimestamp);
         return txDate.isBefore(transferDate);
       });
 
@@ -274,7 +287,7 @@ export class FreshWalletService {
       const currentBalances = await this.nansenClient.getAddressBalances({
         parameters: {
           walletAddresses: [walletAddress],
-          chain,
+          chain: 'all',
           suspiciousFilter: 'off',
         },
         pagination: {
@@ -303,7 +316,7 @@ export class FreshWalletService {
           await this.nansenClient.getAddressHistoricalBalances({
             parameters: {
               walletAddresses: [walletAddress],
-              chain,
+              chain: 'all',
               timeFrame: 30, // 30 дней назад
               suspiciousFilter: 'off',
             },
@@ -491,7 +504,7 @@ export class FreshWalletService {
    */
   private async checkIfWalletWasPreviouslyEmpty(
     walletAddress: string,
-    chain: string
+    chain: SupportedChain
   ): Promise<boolean> {
     try {
       // Get historical balances for the past 7 days
@@ -499,7 +512,7 @@ export class FreshWalletService {
         await this.nansenClient.getAddressHistoricalBalances({
           parameters: {
             walletAddresses: [walletAddress],
-            chain,
+            chain: 'all',
             timeFrame: 7, // Look back 7 days
             suspiciousFilter: 'off',
           },
@@ -535,14 +548,14 @@ export class FreshWalletService {
    */
   private async checkWalletFreshnessAlternative(
     walletAddress: string,
-    chain: string
+    chain: SupportedChain
   ): Promise<boolean> {
     try {
       // Get current balances
       const currentBalances = await this.nansenClient.getAddressBalances({
         parameters: {
           walletAddresses: [walletAddress],
-          chain,
+          chain: 'all',
           suspiciousFilter: 'off',
         },
         pagination: {
@@ -556,15 +569,15 @@ export class FreshWalletService {
         {
           parameters: {
             walletAddresses: [walletAddress],
-            chain,
+            chain: 'all',
             hideSpamToken: true,
           },
           pagination: {
             page: 1,
-            recordsPerPage: 50,
+            recordsPerPage: 100,
           },
           filters: {
-            volumeUsd: { from: 1 }, // Only significant transactions
+            volumeUsd: { from: 100 }, // Only significant transactions
           },
         }
       );
@@ -577,12 +590,14 @@ export class FreshWalletService {
       const thirtyDaysAgo = moment().subtract(30, 'days');
 
       const firstTransaction = recentTransactions.sort(
-        (a, b) => moment(a.timestamp).valueOf() - moment(b.timestamp).valueOf()
+        (a, b) =>
+          moment(a.blockTimestamp).valueOf() -
+          moment(b.blockTimestamp).valueOf()
       )[0];
 
       const isRecentFirstActivity =
         firstTransaction &&
-        moment(firstTransaction.timestamp).isAfter(thirtyDaysAgo);
+        moment(firstTransaction.blockTimestamp).isAfter(thirtyDaysAgo);
 
       return hasLimitedHistory && isRecentFirstActivity;
     } catch (error) {

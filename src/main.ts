@@ -55,7 +55,7 @@ export class Application {
     const config = configService.getConfig();
     logger.info('Application configuration:', {
       tickers: config.tickers,
-      interval: config.intervalSeconds,
+      intervalSeconds: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
       maxRequestsPerSecond: config.nansen.maxRequestsPerSecond,
     });

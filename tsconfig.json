@@ -13,9 +13,22 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "inlineSourceMap": false,
+    "inlineSources": false,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "removeComments": false,
+    "preserveConstEnums": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "ts-node": {
+    "compilerOptions": {
+      "sourceMap": true,
+      "inlineSourceMap": false,
+      "declaration": false,
+      "declarationMap": false,
+      "removeComments": false
+    }
+  }
 }

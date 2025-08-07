@@ -8,14 +8,20 @@
       "program": "${workspaceFolder}/src/index.ts",
       "runtimeArgs": ["-r", "ts-node/register"],
       "env": {
-        "NODE_ENV": "dev"
+        "NODE_ENV": "dev",
+        "TS_NODE_PROJECT": "${workspaceFolder}/tsconfig.json"
       },
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "restart": true,
-      "skipFiles": ["<node_internals>/**"],
+      "skipFiles": ["<node_internals>/**", "node_modules/**"],
       "sourceMaps": true,
-      "stopOnEntry": false
+      "smartStep": true,
+      "stopOnEntry": false,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
     },
     {
       "name": "🔧 Debug Fresh Wallet Scanner",
@@ -24,13 +30,19 @@
       "program": "${workspaceFolder}/src/main.ts",
       "runtimeArgs": ["-r", "ts-node/register"],
       "env": {
-        "NODE_ENV": "dev"
+        "NODE_ENV": "dev",
+        "TS_NODE_PROJECT": "${workspaceFolder}/tsconfig.json"
       },
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "restart": true,
-      "skipFiles": ["<node_internals>/**"],
-      "sourceMaps": true
+      "skipFiles": ["<node_internals>/**", "node_modules/**"],
+      "sourceMaps": true,
+      "smartStep": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
     },
     {
       "name": "🧪 Debug Service Only",
@@ -39,13 +51,39 @@
       "program": "${workspaceFolder}/src/services/debug-fresh-wallet.ts",
       "runtimeArgs": ["-r", "ts-node/register"],
       "env": {
-        "NODE_ENV": "dev"
+        "NODE_ENV": "dev",
+        "TS_NODE_PROJECT": "${workspaceFolder}/tsconfig.json"
       },
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "restart": true,
-      "skipFiles": ["<node_internals>/**"],
-      "sourceMaps": true
+      "skipFiles": ["<node_internals>/**", "node_modules/**"],
+      "sourceMaps": true,
+      "smartStep": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
+    },
+    {
+      "name": "🚀 Debug with Compiled JS",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/main.js",
+      "preLaunchTask": "npm: build",
+      "env": {
+        "NODE_ENV": "dev"
+      },
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "restart": false,
+      "skipFiles": ["<node_internals>/**", "node_modules/**"],
+      "sourceMaps": true,
+      "smartStep": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
     }
   ]
 }
