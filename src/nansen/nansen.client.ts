@@ -41,6 +41,14 @@ export class NansenApiClient {
       timeoutMs: appConfig.timeoutMs,
     };
 
+    logger.info('Nansen API Client initialized with rate limits:', {
+      maxRequestsPerSecond: this.config.maxRequestsPerSecond,
+      maxRequestsPerMinute: this.config.maxRequestsPerMinute,
+      retryAttempts: this.config.retryAttempts,
+      timeoutMs: this.config.timeoutMs,
+      baseUrl: this.config.baseUrl,
+    });
+
     this.client = axios.create({
       baseURL: this.config.baseUrl,
       timeout: this.config.timeoutMs,
@@ -124,6 +132,9 @@ export class NansenApiClient {
     if (this.requestTimes.length >= this.config.maxRequestsPerSecond) {
       const waitTime = 1000 - (now - this.requestTimes[0]);
       if (waitTime > 0) {
+        logger.debug(
+          `Rate limit: ${this.requestTimes.length}/${this.config.maxRequestsPerSecond} req/sec reached. Waiting ${waitTime}ms`
+        );
         await this.sleep(waitTime);
       }
     }
@@ -132,6 +143,9 @@ export class NansenApiClient {
     if (this.minuteRequestTimes.length >= this.config.maxRequestsPerMinute) {
       const waitTime = 60000 - (now - this.minuteRequestTimes[0]);
       if (waitTime > 0) {
+        logger.debug(
+          `Rate limit: ${this.minuteRequestTimes.length}/${this.config.maxRequestsPerMinute} req/min reached. Waiting ${Math.round(waitTime / 1000)}s`
+        );
         await this.sleep(waitTime);
       }
     }
@@ -139,6 +153,13 @@ export class NansenApiClient {
     // Record this request
     this.requestTimes.push(now);
     this.minuteRequestTimes.push(now);
+
+    // Log current rate limit status (только в debug режиме)
+    if (this.requestTimes.length > 0 || this.minuteRequestTimes.length > 0) {
+      logger.debug(
+        `Rate limit status: ${this.requestTimes.length}/${this.config.maxRequestsPerSecond} req/sec, ${this.minuteRequestTimes.length}/${this.config.maxRequestsPerMinute} req/min`
+      );
+    }
   }
 
   private sleep(ms: number): Promise<void> {
@@ -169,14 +190,25 @@ export class NansenApiClient {
     attempt: number = 1
   ): Promise<AxiosResponse> {
     if (attempt >= this.config.retryAttempts) {
+      logger.warn(
+        `Maximum retry attempts (${this.config.retryAttempts}) reached for ${error.config?.method} ${error.config?.url}`
+      );
       return Promise.reject(error);
     }
 
     const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+    logger.debug(
+      `Retry attempt ${attempt}/${this.config.retryAttempts} for ${error.config?.method} ${error.config?.url}. Waiting ${waitTime}ms`
+    );
+
     await this.sleep(waitTime);
 
     try {
-      return await this.client.request(error.config!);
+      const response = await this.client.request(error.config!);
+      logger.debug(
+        `Retry successful after ${attempt} attempts for ${error.config?.method} ${error.config?.url}`
+      );
+      return response;
     } catch (retryError) {
       return this.retryRequest(retryError as AxiosError, attempt + 1);
     }
