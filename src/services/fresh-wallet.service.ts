@@ -5,6 +5,7 @@ import {
   FreshWallet,
   SupportedChain,
   TokenTransfersResponse,
+  TxTypes,
 } from '../nansen/nansen.types';
 import { logger } from '../utils/logger';
 import { CacheService } from './cache.service';
@@ -148,7 +149,7 @@ export class FreshWalletService {
   ): Promise<FreshWallet[]> {
     const freshWallets: FreshWallet[] = [];
     const fromDate = moment().subtract(
-      this.config.nodeEnv === 'dev' ? this.config.intervalSeconds + 60 : 3600, // +1 min for 100% intersection, 1 hour for dev
+      this.config.nodeEnv === 'dev' ? this.config.intervalSeconds + 60 : 7200, // +1 min for 100% intersection, 2 hour for dev
       'seconds'
     );
     const toDate = moment();
@@ -189,21 +190,10 @@ export class FreshWalletService {
         }
       }
 
-      // Filter significant incoming transfers only to private wallets
-      const filteredIncomingTransfers = transfers.filter((transfer) => {
-        const usdValue = transfer.valueUsd || 0;
-        const recipient = transfer.toAddress;
-        const recipientLabel = transfer.toLabel;
-
-        // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
-        // But the sender MAY be CEX/DEX - that's fine!
-        return (
-          usdValue >= minDepositUSD &&
-          recipient &&
-          transfer.txType === 'transfer' &&
-          this.isValidPrivateWallet(recipient, recipientLabel)
-        );
-      });
+      // Filter significant incoming and transfers only to private wallets
+      const filteredIncomingTransfers = transfers.filter((transfer) =>
+        this.isValidWalletTransfer(transfer)
+      );
 
       logger.info(
         `Found ${filteredIncomingTransfers.length} significant incoming transfers for ${symbol}`
@@ -225,10 +215,9 @@ export class FreshWalletService {
           const wasTrulyFresh =
             await this.verifyWalletWasTrulyFreshBeforeTransfer(
               recipient,
-              chain,
               timestamp,
               tokenAddress,
-              recipientLabel
+              symbol
             );
 
           if (wasTrulyFresh) {
@@ -257,23 +246,32 @@ export class FreshWalletService {
     return freshWallets;
   }
 
+  private isValidWalletTransfer(transfer: TokenTransfersResponse): boolean {
+    const usdValue = transfer.valueUsd || 0;
+    const recipient = transfer.toAddress;
+    const recipientLabel = transfer.toLabel;
+    const transferTxTypes: TxTypes[] = ['transfer', 'swap', 'simpleSwap'];
+    const minDepositUSD = configService.getFreshWalletConfig().minDepositUSD;
+
+    // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
+    // But the sender MAY be CEX/DEX - that's fine!
+    return (
+      usdValue >= 1000 && // todo return minDepositUSD
+      transferTxTypes.includes(transfer.txType) &&
+      this.isValidPrivateWallet(recipient, recipientLabel)
+    );
+  }
+
   /**
    * КРИТИЧЕСКИ ВАЖНО: Проверяет что кошелек был ДЕЙСТВИТЕЛЬНО свежим до конкретного перевода
    */
   private async verifyWalletWasTrulyFreshBeforeTransfer(
     walletAddress: string,
-    chain: SupportedChain,
     transferTimestamp: string,
     tokenAddress: string,
-    recipietnLable: string
+    currentSymbol: string
   ): Promise<boolean> {
     try {
-      // 1. Проверяем что это приватный кошелек (не CEX/DEX/контракт)
-      if (!this.isValidPrivateWallet(walletAddress, recipietnLable)) {
-        logger.debug(`${walletAddress} is not a private wallet`);
-        return false;
-      }
-
       // 2. Получаем ВСЮ историю транзакций кошелька
       const allTransactions = await this.nansenClient.getAddressTransactions({
         parameters: {
@@ -298,70 +296,80 @@ export class FreshWalletService {
         return txDate.isBefore(transferDate);
       });
 
-      if (previousTransactions.length > 0) {
-        logger.debug(
-          `${walletAddress} had ${previousTransactions.length} previous transactions - not fresh`
-        );
-        return false;
-      }
+      // Фильтруем транзакции, которые не связаны с нашим токеном
+      const filteredPreviousTransactions = previousTransactions.filter((tx) => {
+        return tx.tokenReceivedTransformed.some((token) => {
+          const symbol = token.symbol.toLowerCase();
+          const currentTickerLower = currentSymbol.toLowerCase();
 
-      // 4. Проверяем текущие балансы - должен быть ТОЛЬКО наш токен
-      const currentBalances = await this.nansenClient.getAddressBalances({
-        parameters: {
-          walletAddresses: [walletAddress],
-          chain: 'all',
-          suspiciousFilter: 'off',
-        },
-        pagination: {
-          page: 1,
-          recordsPerPage: 100,
-        },
+          return symbol !== currentTickerLower;
+        });
       });
 
-      // Убираем наш токен и смотрим что осталось
-      const otherTokens = currentBalances.filter(
-        (balance) =>
-          balance.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase() &&
-          (balance.usdValue || 0) > 1 // Больше $1
-      );
-
-      if (otherTokens.length > 0) {
+      if (filteredPreviousTransactions.length > 0) {
         logger.debug(
-          `${walletAddress} has other tokens: ${otherTokens.length} - not fresh`
+          `${walletAddress} had ${filteredPreviousTransactions.length} previous transactions with other symbols - not fresh`
         );
         return false;
       }
 
-      // 5. Дополнительная проверка - исторические балансы
-      try {
-        const historicalBalances =
-          await this.nansenClient.getAddressHistoricalBalances({
-            parameters: {
-              walletAddresses: [walletAddress],
-              chain: 'all',
-              timeFrame: 30, // 30 дней назад
-              suspiciousFilter: 'off',
-            },
-            pagination: {
-              page: 1,
-              recordsPerPage: 100,
-            },
-          });
+      // // 4. Проверяем текущие балансы - должен быть ТОЛЬКО наш токен
+      // const currentBalances = await this.nansenClient.getAddressBalances({
+      //   parameters: {
+      //     walletAddresses: [walletAddress],
+      //     chain: 'all',
+      //     suspiciousFilter: 'off',
+      //   },
+      //   pagination: {
+      //     page: 1,
+      //     recordsPerPage: 100,
+      //   },
+      // });
 
-        // Если есть исторические балансы > $1 - не свежий
-        const hadHistoricalBalance = historicalBalances.some(
-          (balance) => (balance.usdValue || 0) > 1
-        );
+      // // Убираем наш токен и смотрим что осталось
+      // const otherTokens = currentBalances.filter(
+      //   (balance) =>
+      //     balance.tokenAddress.toLowerCase() !== tokenAddress.toLowerCase() &&
+      //     (balance.usdValue || 0) > 1 // Больше $1
+      // );
 
-        if (hadHistoricalBalance) {
-          logger.debug(`${walletAddress} had historical balances - not fresh`);
-          return false;
-        }
-      } catch (error) {
-        logger.debug(
-          `Could not get historical balances for ${walletAddress}, continuing...`
-        );
-      }
+      // if (otherTokens.length > 0) {
+      //   logger.debug(
+      //     `${walletAddress} has other tokens: ${otherTokens.length} - not fresh`
+      //   );
+      //   return false;
+      // }
+
+      // // 6. Дополнительная проверка - исторические балансы
+      // try {
+      //   const historicalBalances =
+      //     await this.nansenClient.getAddressHistoricalBalances({
+      //       parameters: {
+      //         walletAddresses: [walletAddress],
+      //         chain: 'all',
+      //         timeFrame: 30, // 30 дней назад
+      //         suspiciousFilter: 'off',
+      //       },
+      //       pagination: {
+      //         page: 1,
+      //         recordsPerPage: 100,
+      //       },
+      //     });
+
+      //   // Если есть исторические балансы > $1 - не свежий
+      //   const hadHistoricalBalance = historicalBalances.some(
+      //     (balance) => (balance.usdValue || 0) > 1
+      //   );
+
+      //   if (hadHistoricalBalance) {
+      //     logger.debug(`${walletAddress} had historical balances - not fresh`);
+      //     return false;
+      //   }
+      // } catch (error) {
+      //   logger.debug(
+      //     `Could not get historical balances for ${walletAddress}, continuing...`
+      //   );
+      // }
 
       logger.debug(`✅ ${walletAddress} verified as truly fresh wallet`);
       return true;
@@ -378,7 +386,7 @@ export class FreshWalletService {
    * Проверяет что адрес - это приватный кошелек (не CEX/DEX/контракт)
    */
   private isValidPrivateWallet(address: string, label: string): boolean {
-    const regexpWallet = /^\[[^\s]*$/;
+    const regexpWallet = /^\[[^\s]*$/gm;
     // Простые эвристики для фильтрации известных типов адресов
     const lowerAddress = address.toLowerCase();
 

@@ -257,6 +257,13 @@ export interface TokenTransfersRequest {
   pagination: PaginationParams;
 }
 
+export type TxTypes =
+  | 'transfer'
+  | 'swap'
+  | 'simpleSwap'
+  | 'multicall'
+  | 'transferAndMulticall';
+
 export interface TokenTransfersResponse {
   fromLabel: string;
   fromAddress: string;
@@ -266,12 +273,7 @@ export interface TokenTransfersResponse {
   valueUsd: number;
   blockTimestamp: string; // ISO format: "2025-08-01T06:46:35Z"
   transactionHash: string;
-  txType:
-    | 'transfer'
-    | 'swap'
-    | 'simpleSwap'
-    | 'multicall'
-    | 'transferAndMulticall';
+  txType: TxTypes;
 }
 
 // Fresh Wallet Detection Types

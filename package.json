@@ -4,10 +4,10 @@
   "description": "Fresh wallet scanner using Nansen API",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/main.js",
-    "start:dev": "ts-node src/main.ts",
+    "start": "node dist/index.js",
+    "start:dev": "ts-node src/index.ts",
     "test:app": "ts-node src/test.ts",
     "clean": "rm -rf dist",
     "lint": "eslint src/**/*.ts",
