@@ -14,6 +14,7 @@ export class FreshWalletService {
   private readonly config: AppConfig;
   private readonly nansenClient: NansenApiClient;
   private readonly cacheService: CacheService;
+  private readonly configService = configService;
 
   constructor(nansenClient: NansenApiClient, cacheService?: CacheService) {
     this.config = configService.getConfig();
@@ -30,30 +31,35 @@ export class FreshWalletService {
     try {
       logger.info('Starting fresh wallet search...');
 
-      const tickers = this.config.tickers;
+      const symbols = await this.configService.getSymbols();
       const minDepositUSD = this.config.freshWallet.minDepositUSD;
       const freshWallets: FreshWallet[] = [];
 
+      if (symbols.length === 0) {
+        logger.warn('No symbols configured in symbols.json file');
+        return [];
+      }
+
       logger.info(
-        `Searching for fresh wallets with ${tickers.join(', ')} deposits >= $${minDepositUSD}`
+        `Searching for fresh wallets with ${symbols.join(', ')} deposits >= $${minDepositUSD}`
       );
 
       // Создаем ключ кеша для поиска токенов
       const tokensSearchCacheKey = CacheService.createKey(
         'tokens_search',
-        tickers.sort().join(','), // Сортируем тикеры для консистентности ключа
+        symbols.sort().join(','), // Сортируем символы для консистентности ключа
         this.config.chains.sort().join(',') // Сортируем цепи для консистентности ключа
       );
 
-      // Сначала найдем токены для указанных тикеров (с кешированием)
+      // Сначала найдем токены для указанных символов (с кешированием)
       const tokenMap = await this.cacheService.getOrSet(
         tokensSearchCacheKey,
         async () => {
           logger.info(
-            `🔍 Searching tokens for tickers: ${tickers.join(', ')} in chains: ${this.config.chains.join(', ')} (not cached)`
+            `🔍 Searching tokens for symbols: ${symbols.join(', ')} in chains: ${this.config.chains.join(', ')} (not cached)`
           );
           return await this.nansenClient.findTokensForTickers(
-            tickers,
+            symbols,
             this.config.chains
           );
         }
@@ -61,7 +67,7 @@ export class FreshWalletService {
 
       if (!tokenMap || tokenMap.size === 0) {
         logger.warn(
-          `No tokens found for specified tickers: ${tickers.join(', ')}`
+          `No tokens found for specified symbols: ${symbols.join(', ')}`
         );
         return [];
       }
@@ -85,15 +91,15 @@ export class FreshWalletService {
 
       if (filteredTokenMap.size === 0) {
         logger.warn(
-          `No tokens found in configured chains (${this.config.chains.join(', ')}) for tickers: ${tickers.join(', ')}. Check if your tickers exist in the specified chains.`
+          `No tokens found in configured chains (${this.config.chains.join(', ')}) for symbols: ${symbols.join(', ')}. Check if your symbols exist in the specified chains.`
         );
         return [];
       }
 
-      // Обрабатываем каждый найденный токен из указанных тикеров в настроенных сетях
-      for (const [ticker, tokens] of filteredTokenMap.entries()) {
+      // Обрабатываем каждый найденный токен из указанных символов в настроенных сетях
+      for (const [symbol, tokens] of filteredTokenMap.entries()) {
         logger.info(
-          `🔍 Analyzing ${ticker.toUpperCase()} tokens for fresh wallets (${tokens.length} tokens in configured chains)...`
+          `🔍 Analyzing ${symbol.toUpperCase()} tokens for fresh wallets (${tokens.length} tokens in configured chains)...`
         );
 
         for (const token of tokens) {
@@ -103,7 +109,7 @@ export class FreshWalletService {
                 token.address,
                 token.chain,
                 token.symbol,
-                ticker,
+                symbol,
                 minDepositUSD
               );
             freshWallets.push(...tokenFreshWallets);
@@ -128,7 +134,7 @@ export class FreshWalletService {
       uniqueWallets.sort((a, b) => b.initDepositUSD - a.initDepositUSD);
 
       logger.info(
-        `Fresh wallet search completed. Found ${uniqueWallets.length} fresh wallets for tickers: ${tickers.join(', ')}`
+        `Fresh wallet search completed. Found ${uniqueWallets.length} fresh wallets for symbols: ${symbols.join(', ')}`
       );
       return uniqueWallets;
     } catch (error) {
@@ -138,7 +144,7 @@ export class FreshWalletService {
   }
 
   /**
-   * Find fresh wallets for a specific token from TICKERS
+   * Find fresh wallets for a specific token from configured symbols
    */
   private async findFreshWalletsForSpecificToken(
     tokenAddress: string,

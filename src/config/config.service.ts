@@ -3,6 +3,7 @@ import Joi from 'joi';
 import path from 'path';
 import { SupportedChain } from '../nansen/nansen.types';
 import { logger } from '../utils/logger';
+import { symbolsManager } from '../utils/symbols-manager';
 
 // Find and load .env file from project root
 const findProjectRoot = (): string => {
@@ -29,14 +30,12 @@ dotenv.config({ path: envPath });
 // Debug: log the path being used and some env vars
 console.log('Loading .env from:', envPath);
 console.log('Environment loaded:', {
-  hasTickers: !!process.env.TICKERS,
   hasApiKey: !!process.env.NANSEN_API_KEY,
-  tickersValue: process.env.TICKERS,
+  hasChains: !!process.env.CHAINS,
 });
 
 // Configuration schema for validation
 const configSchema = Joi.object({
-  TICKERS: Joi.string().required(),
   CHAINS: Joi.string().required(),
   INTERVAL_SECONDS: Joi.number().integer().min(60).required(), // Minimum 60 seconds
   NANSEN_BASE_URL: Joi.string().uri().required(),
@@ -57,7 +56,7 @@ const configSchema = Joi.object({
 });
 
 export interface AppConfig {
-  tickers: string[];
+  symbols: string[];
   chains: SupportedChain[];
   intervalSeconds: number; // in seconds
   nodeEnv: string;
@@ -68,6 +67,11 @@ export interface AppConfig {
     maxRequestsPerMinute: number;
     retryAttempts: number;
     timeoutMs: number;
+  };
+  tg: {
+    botToken: string;
+    chatId: string;
+    threadId?: number; // Optional thread ID for group chats
   };
   freshWallet: {
     minDepositUSD: number;
@@ -83,7 +87,6 @@ class ConfigService {
 
   private loadConfig(): AppConfig {
     const envConfig = {
-      TICKERS: process.env.TICKERS,
       CHAINS: process.env.CHAINS,
       INTERVAL_SECONDS: Number(process.env.INTERVAL_SECONDS),
       NANSEN_BASE_URL: process.env.NANSEN_BASE_URL,
@@ -100,6 +103,11 @@ class ConfigService {
         process.env.FRESH_WALLET_MIN_DEPOSIT_USD
       ),
       NODE_ENV: process.env.NODE_ENV || 'dev',
+      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+      TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+      TELEGRAM_THREAD_ID: process.env.TELEGRAM_THREAD_ID
+        ? Number(process.env.TELEGRAM_THREAD_ID)
+        : undefined,
     };
 
     const { error, value } = configSchema.validate(envConfig, {
@@ -119,9 +127,7 @@ class ConfigService {
     const validatedConfig = value as any;
 
     const config: AppConfig = {
-      tickers: validatedConfig.TICKERS.split(',').map((ticker: string) =>
-        ticker.trim().toLowerCase()
-      ),
+      symbols: [], // Symbols will be loaded from symbols.json file
       chains: (process.env.CHAINS || '')
         .split(',')
         .map((chain: string) => chain.trim().toLowerCase() as SupportedChain),
@@ -135,13 +141,18 @@ class ConfigService {
         retryAttempts: validatedConfig.NANSEN_RETRY_ATTEMPTS,
         timeoutMs: validatedConfig.NANSEN_TIMEOUT_MS,
       },
+      tg: {
+        botToken: validatedConfig.TELEGRAM_BOT_TOKEN,
+        chatId: validatedConfig.TELEGRAM_CHAT_ID,
+        threadId: validatedConfig.TELEGRAM_THREAD_ID,
+      },
       freshWallet: {
         minDepositUSD: validatedConfig.FRESH_WALLET_MIN_DEPOSIT_USD,
       },
     };
 
     logger.info('Configuration loaded successfully', {
-      tickers: config.tickers,
+      symbols: config.symbols,
       intervalSeconds: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
     });
@@ -153,8 +164,8 @@ class ConfigService {
     return this.config;
   }
 
-  public getTickers(): string[] {
-    return this.config.tickers;
+  public async getSymbols(): Promise<string[]> {
+    return await symbolsManager.getSymbols();
   }
 
   public getInterval(): number {

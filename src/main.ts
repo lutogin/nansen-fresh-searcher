@@ -53,8 +53,9 @@ export class Application {
   private async initialize(): Promise<void> {
     // Log configuration (without sensitive data)
     const config = configService.getConfig();
+    const symbols = await configService.getSymbols();
     logger.info('Application configuration:', {
-      tickers: config.tickers,
+      symbols: symbols,
       intervalSeconds: config.intervalSeconds,
       minDepositUSD: config.freshWallet.minDepositUSD,
       maxRequestsPerSecond: config.nansen.maxRequestsPerSecond,
