@@ -32,6 +32,8 @@ console.log('Loading .env from:', envPath);
 console.log('Environment loaded:', {
   hasApiKey: !!process.env.NANSEN_API_KEY,
   hasChains: !!process.env.CHAINS,
+  hasTelegramChatId: !!process.env.TELEGRAM_CHAT_ID,
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN?.substring(0, 10) + '...', // Показываем только первые 10 символов
 });
 
 // Configuration schema for validation
@@ -53,6 +55,11 @@ const configSchema = Joi.object({
   NANSEN_RETRY_ATTEMPTS: Joi.number().integer().min(1).max(10).default(3),
   NANSEN_TIMEOUT_MS: Joi.number().integer().min(5000).max(60000).default(30000),
   FRESH_WALLET_MIN_DEPOSIT_USD: Joi.number().min(1).default(1000),
+  // Добавляем Telegram переменные
+  TELEGRAM_BOT_TOKEN: Joi.string().required(),
+  TELEGRAM_CHAT_ID: Joi.string().required(),
+  TELEGRAM_THREAD_ID: Joi.number().integer().optional(),
+  NODE_ENV: Joi.string().default('dev'),
 });
 
 export interface AppConfig {

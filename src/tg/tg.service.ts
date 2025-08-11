@@ -5,13 +5,21 @@ import { symbolsManager } from '../utils/symbols-manager';
 import { ISendMessageParams } from './tg.interfaces';
 
 export class TgClient {
+  private static instance: TgClient;
   private readonly bot: TelegramClient;
   private readonly config: AppConfig;
 
-  public constructor() {
+  private constructor() {
     this.config = configService.getConfig();
     this.bot = new TelegramClient(this.config.tg.botToken, { polling: true });
     this.setupMessageHandling();
+  }
+
+  public static getInstance(): TgClient {
+    if (!TgClient.instance) {
+      TgClient.instance = new TgClient();
+    }
+    return TgClient.instance;
   }
 
   private setupMessageHandling(): void {
@@ -138,5 +146,59 @@ export class TgClient {
 
   public async getSymbols(): Promise<string[]> {
     return await symbolsManager.getSymbols();
+  }
+
+  /**
+   * Отправляет уведомление о найденном fresh кошельке
+   */
+  public async sendFreshWalletAlert(walletData: {
+    symbol: string;
+    chain: string;
+    walletAddress: string;
+    depositAmount: number;
+    currentBalance?: number;
+  }): Promise<void> {
+    try {
+      const { symbol, chain, walletAddress, depositAmount, currentBalance } =
+        walletData;
+
+      let message = `🔥 *Fresh Wallet Alert!*\n\n`;
+      message += `💰 *Token:* ${symbol.toUpperCase()}\n`;
+      message += `🌐 *Network:* ${chain.charAt(0).toUpperCase() + chain.slice(1)}\n`;
+      message += `👛 *Wallet:* \`${walletAddress}\`\n`;
+      message += `💵 *Initial Deposit:* $${depositAmount.toLocaleString()}\n`;
+
+      if (currentBalance !== undefined) {
+        message += `💎 *Current Balance:* $${currentBalance.toLocaleString()}\n`;
+      }
+
+      message += `\n🔗 *Explorer:* `;
+
+      // Добавляем ссылки на эксплореры в зависимости от сети
+      switch (chain.toLowerCase()) {
+        case 'ethereum':
+          message += `[Etherscan](https://etherscan.io/address/${walletAddress})`;
+          break;
+        case 'bnb':
+        case 'bsc':
+          message += `[BSCScan](https://bscscan.com/address/${walletAddress})`;
+          break;
+        case 'arbitrum':
+          message += `[Arbiscan](https://arbiscan.io/address/${walletAddress})`;
+          break;
+        case 'solana':
+          message += `[Solscan](https://solscan.io/account/${walletAddress})`;
+          break;
+        default:
+          message += `\`${walletAddress}\``;
+      }
+
+      await this.sendMessage({ message });
+      logger.info(
+        `Sent fresh wallet alert for ${symbol.toUpperCase()} on ${chain}`
+      );
+    } catch (error) {
+      logger.error('Error sending fresh wallet alert:', error);
+    }
   }
 }

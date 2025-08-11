@@ -2,6 +2,7 @@ import { configService } from './config/config.service';
 import { NansenApiClient } from './nansen/nansen.client';
 import { FreshWalletService } from './services/fresh-wallet.service';
 import { FreshWalletScanner } from './services/scanner.service';
+import { TgClient } from './tg/tg.service';
 import { logger } from './utils/logger';
 
 /**
@@ -15,17 +16,20 @@ export class Application {
   private readonly scanner: FreshWalletScanner;
   private readonly freshWalletService: FreshWalletService;
   private readonly nansenClient: NansenApiClient;
+  private readonly tgClient: TgClient;
 
   constructor(
     scanner?: FreshWalletScanner,
     freshWalletService?: FreshWalletService,
-    nansenClient?: NansenApiClient
+    nansenClient?: NansenApiClient,
+    tgClient?: TgClient
   ) {
     // Dependency injection with defaults (can be overridden for testing)
     this.nansenClient = nansenClient || new NansenApiClient();
     this.freshWalletService =
       freshWalletService || new FreshWalletService(this.nansenClient);
     this.scanner = scanner || new FreshWalletScanner(this.freshWalletService);
+    this.tgClient = tgClient || TgClient.getInstance();
 
     this.setupSignalHandlers();
   }
@@ -61,6 +65,18 @@ export class Application {
       maxRequestsPerSecond: config.nansen.maxRequestsPerSecond,
     });
 
+    // Initialize Telegram bot
+    logger.info('Telegram bot initialized and listening for commands');
+
+    // Send startup notification
+    try {
+      await this.tgClient.sendMessage({
+        message: `🚀 *Fresh Wallet Scanner Started*\n\nCurrent symbols: ${symbols.map((s) => s.toUpperCase()).join(', ')}\nInterval: ${config.intervalSeconds}s\nMin deposit: $${config.freshWallet.minDepositUSD.toLocaleString()}\n\nCommands:\n• \`add <symbol>\` - Add symbol\n• \`rm <symbol>\` - Remove symbol\n• \`list\` - Show all symbols`,
+      });
+    } catch (error) {
+      logger.warn('Failed to send startup notification to Telegram:', error);
+    }
+
     logger.info('Application initialization completed');
   }
 
@@ -87,6 +103,20 @@ export class Application {
     try {
       // Stop the scanner
       this.scanner.stop();
+
+      // Send shutdown notification and stop Telegram bot
+      try {
+        await this.tgClient.sendMessage({
+          message:
+            '🛑 *Fresh Wallet Scanner Stopped*\n\nApplication is shutting down gracefully.',
+        });
+
+        // Stop polling
+        this.tgClient.getBotInstance().stopPolling();
+        logger.info('Telegram bot stopped');
+      } catch (error) {
+        logger.warn('Failed to send shutdown notification to Telegram:', error);
+      }
 
       logger.info('Application stopped successfully');
     } catch (error) {

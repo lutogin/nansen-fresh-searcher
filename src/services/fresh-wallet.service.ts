@@ -7,6 +7,7 @@ import {
   TokenTransfersResponse,
   TxTypes,
 } from '../nansen/nansen.types';
+import { TgClient } from '../tg/tg.service';
 import { logger } from '../utils/logger';
 import { CacheService } from './cache.service';
 
@@ -113,6 +114,24 @@ export class FreshWalletService {
                 minDepositUSD
               );
             freshWallets.push(...tokenFreshWallets);
+
+            // Отправляем уведомления для каждого найденного fresh кошелька
+            for (const wallet of tokenFreshWallets) {
+              try {
+                await TgClient.getInstance().sendFreshWalletAlert({
+                  symbol: token.symbol,
+                  chain: token.chain,
+                  walletAddress: wallet.wallet,
+                  depositAmount: wallet.initDepositUSD,
+                  // TODO: Добавить получение текущего баланса
+                });
+              } catch (alertError) {
+                logger.warn(
+                  `Failed to send alert for wallet ${wallet.wallet}:`,
+                  alertError
+                );
+              }
+            }
 
             logger.info(
               `✅ ${token.symbol} on ${token.chain}: found ${tokenFreshWallets.length} fresh wallets`
@@ -262,7 +281,7 @@ export class FreshWalletService {
     // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
     // But the sender MAY be CEX/DEX - that's fine!
     return (
-      usdValue >= 1000 && // todo return minDepositUSD
+      usdValue >= minDepositUSD && // todo return minDepositUSD
       transferTxTypes.includes(transfer.txType) &&
       this.isValidPrivateWallet(recipient, recipientLabel)
     );
@@ -296,7 +315,7 @@ export class FreshWalletService {
 
       const transferDate = moment(transferTimestamp);
 
-      // 3. КРИТИЧНО: проверяем что НЕ БЫЛО транзакций ДО нашего перевода
+      // 3. КРИТИЧНО: проверяем транзакции до перевода
       const previousTransactions = allTransactions.filter((tx) => {
         const txDate = moment(tx.blockTimestamp);
         return txDate.isBefore(transferDate);
