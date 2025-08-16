@@ -281,7 +281,7 @@ export class FreshWalletService {
     // IMPORTANT: check that the recipient is a private wallet (not CEX/DEX).
     // But the sender MAY be CEX/DEX - that's fine!
     return (
-      usdValue >= minDepositUSD && // todo return minDepositUSD
+      usdValue >= minDepositUSD &&
       transferTxTypes.includes(transfer.txType) &&
       this.isValidPrivateWallet(recipient, recipientLabel)
     );

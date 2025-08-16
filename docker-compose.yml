@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  nansen-fresh-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nansen-fresh-scanner
+    restart: unless-stopped
+    environment:
+      # Конфигурация сканирования
+      - CHAINS=ethereum,solana,arbitrum,bnb
+      - INTERVAL_SECONDS=300
+      - FRESH_WALLET_MIN_DEPOSIT_USD=50000
+
+      # Nansen API (передается из .env файла хоста)
+      - NANSEN_BASE_URL=${NANSEN_BASE_URL}
+      - NANSEN_API_KEY=${NANSEN_API_KEY}
+      - NANSEN_MAX_REQUESTS_PER_SECOND=${NANSEN_MAX_REQUESTS_PER_SECOND:-20}
+      - NANSEN_MAX_REQUESTS_PER_MINUTE=${NANSEN_MAX_REQUESTS_PER_MINUTE:-500}
+      - NANSEN_RETRY_ATTEMPTS=${NANSEN_RETRY_ATTEMPTS:-3}
+      - NANSEN_TIMEOUT_MS=${NANSEN_TIMEOUT_MS:-30000}
+
+      # Telegram Bot (передается из .env файла хоста)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TELEGRAM_THREAD_ID=${TELEGRAM_THREAD_ID}
+
+      # Режим работы
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+    volumes:
+      # Монтируем директорию для persistence конфигурации символов
+      - ./data:/app/src/config
+    networks:
+      - nansen-network
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+    # Политика перезапуска
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 120s
+
+networks:
+  nansen-network:
+    driver: bridge
+
+# Для хранения данных символов
+volumes:
+  nansen-data:

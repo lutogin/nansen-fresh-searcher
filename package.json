@@ -1,5 +1,5 @@
 {
-  "name": "arkham-app",
+  "name": "nansen-app",
   "version": "1.0.0",
   "description": "Fresh wallet scanner using Nansen API",
   "main": "dist/index.js",

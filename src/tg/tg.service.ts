@@ -12,7 +12,18 @@ export class TgClient {
   private constructor() {
     this.config = configService.getConfig();
     this.bot = new TelegramClient(this.config.tg.botToken, { polling: true });
-    this.setupMessageHandling();
+
+    // ДОБАВИТЬ КОМАНДЫ В МЕНЮ БОТА:
+    this.bot.setMyCommands([
+      { command: 'list', description: 'Show all symbols' },
+      { command: 'add', description: 'Add symbol (e.g. /add btc)' },
+      { command: 'rm', description: 'Remove symbol (e.g. /rm eth)' },
+    ]);
+
+    this.bot.on('message', (msg) => {
+      console.log('Received any message!'); // Добавить это для проверки
+      this.handleMessage(msg);
+    });
   }
 
   public static getInstance(): TgClient {
@@ -22,41 +33,51 @@ export class TgClient {
     return TgClient.instance;
   }
 
-  private setupMessageHandling(): void {
-    this.bot.on('message', (msg) => {
-      this.handleMessage(msg);
-    });
-  }
-
   private async handleMessage(msg: any): Promise<void> {
+    const text = msg.text?.trim();
+    const chatId = msg.chat.id;
+
+    console.log('=== MESSAGE DEBUG ===');
+    console.log('Chat ID:', chatId);
+    console.log('Chat Type:', msg.chat.type); // private/group/supergroup/channel
+    console.log('Text:', text);
+    console.log('From:', msg.from?.username);
+    console.log('===================');
+
+    if (!text) return;
+
+    // ИСПРАВИТЬ - убрать @ упоминание бота и добавить варианты без /
+    let command = text.toLowerCase();
+    if (command.includes('@')) {
+      command = command.split('@')[0]; // Убираем @nanasen_scanner_bot
+    }
+
     try {
-      const chatId = msg.chat.id;
-      const text = msg.text?.trim();
-
-      if (!text) return;
-
-      // Regex patterns for commands
-      const addPattern = /^add\s+([A-Za-z0-9]+)$/i;
-      const rmPattern = /^rm\s+([A-Za-z0-9]+)$/i;
-
-      if (addPattern.test(text)) {
-        const match = text.match(addPattern);
-        const symbol = match![1].toLowerCase(); // Храним в нижнем регистре
-        await this.addSymbol(symbol, chatId);
-      } else if (rmPattern.test(text)) {
-        const match = text.match(rmPattern);
-        const symbol = match![1].toLowerCase(); // Храним в нижнем регистре
-        await this.removeSymbol(symbol, chatId);
-      } else if (text.toLowerCase() === 'list') {
-        await this.listSymbols(chatId);
-      } else {
+      if (command === '/list' || command === 'list') {
+        console.log('Processing list command...');
+        const symbols = await configService.getSymbols();
         await this.bot.sendMessage(
           chatId,
-          'Available commands:\n• add <symbol>\n• rm <symbol>\n• list'
+          `📋 Current symbols: ${symbols.join(', ')}`
+        );
+        console.log('List command sent!');
+      } else if (command.startsWith('/add ') || command.startsWith('add ')) {
+        const symbol = command.replace(/^(\/)?add\s+/, '').toLowerCase();
+        console.log(`Adding symbol: ${symbol}`);
+        // Логика добавления...
+        await this.bot.sendMessage(chatId, `✅ Added: ${symbol.toUpperCase()}`);
+      } else if (command.startsWith('/rm ') || command.startsWith('rm ')) {
+        const symbol = command.replace(/^(\/)?rm\s+/, '').toLowerCase();
+        console.log(`Removing symbol: ${symbol}`);
+        // Логика удаления...
+        await this.bot.sendMessage(
+          chatId,
+          `❌ Removed: ${symbol.toUpperCase()}`
         );
       }
     } catch (error) {
-      logger.error('Error handling Telegram message:', error);
+      console.error('Error processing command:', error);
+      await this.bot.sendMessage(chatId, '❌ Error processing command');
     }
   }
 
